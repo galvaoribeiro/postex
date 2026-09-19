@@ -1,0 +1,158 @@
+# =============================================================================
+# Taxonomia editorial do Motor de Conteudo
+#
+# Os pilares de conteudo ficam aqui, como dados, e nao espalhados pelo codigo.
+# Para acrescentar, remover ou reescrever um pilar basta editar este arquivo:
+# a API (`GET /api/v1/ai/taxonomy`), os prompts de ideacao e a validacao de
+# categorias passam a refletir a mudanca sem nenhuma alteracao em Python.
+#
+# Campos:
+#   key                 identificador estavel, persistido em content.category
+#   label               nome exibido na interface
+#   description         o que caracteriza o pilar
+#   objective           para que ele serve na estrategia
+#   recommended_formats formatos que costumam funcionar melhor
+#   prompt_hint         instrucao injetada no prompt quando o pilar e usado
+#   weight              peso relativo na distribuicao automatica de ideias
+# =============================================================================
+
+version: 1
+
+categories:
+  - key: educativo
+    label: Educativo
+    description: >-
+      Ensina algo pratico e util relacionado ao universo do negocio, sem exigir
+      compra. Entrega valor antes de pedir qualquer coisa.
+    objective: Construir confianca e alcance com quem ainda nao conhece a marca.
+    recommended_formats: [REEL, CAROUSEL]
+    prompt_hint: >-
+      Ensine um passo a passo concreto e aplicavel hoje. Prefira listas curtas e
+      numeros especificos. Nao venda: o valor precisa existir mesmo sem a compra.
+    weight: 3
+
+  - key: demonstracao
+    label: Demonstracao
+    description: >-
+      Mostra o produto ou servico em uso real, com o antes e o depois ou o
+      processo acontecendo.
+    objective: Reduzir a distancia entre o interesse e a decisao de compra.
+    recommended_formats: [REEL, STORY]
+    prompt_hint: >-
+      Descreva o que a camera mostra em cada momento. Priorize o resultado
+      visivel e o detalhe que so quem faz conhece.
+    weight: 3
+
+  - key: produto
+    label: Produto
+    description: Apresenta um produto especifico do catalogo, com seus atributos reais.
+    objective: Fazer a audiencia entender exatamente o que esta sendo vendido.
+    recommended_formats: [IMAGE_POST, CAROUSEL, REEL]
+    prompt_hint: >-
+      Cite o produto pelo nome cadastrado. Traduza cada atributo em beneficio
+      concreto para o publico-alvo. Nao invente caracteristicas.
+    weight: 3
+
+  - key: servico
+    label: Servico
+    description: Explica um servico, o que esta incluso e como e a experiencia.
+    objective: Esclarecer escopo e valor percebido antes do primeiro contato.
+    recommended_formats: [CAROUSEL, REEL]
+    prompt_hint: >-
+      Explique o servico pelo nome cadastrado, o que esta incluso e como e a
+      jornada do cliente do primeiro contato a entrega.
+    weight: 2
+
+  - key: autoridade
+    label: Autoridade
+    description: >-
+      Posiciona o negocio como referencia: opiniao fundamentada, criterio
+      tecnico, experiencia acumulada.
+    objective: Justificar por que confiar nesse negocio e nao em outro.
+    recommended_formats: [REEL, CAROUSEL]
+    prompt_hint: >-
+      Assuma uma posicao clara e defenda com criterio tecnico ou experiencia.
+      Evite frases de efeito sem substancia.
+    weight: 2
+
+  - key: prova_social
+    label: Prova social
+    description: Resultados de clientes, depoimentos, casos e numeros alcancados.
+    objective: Transferir a confianca de quem ja comprou para quem ainda hesita.
+    recommended_formats: [CAROUSEL, REEL, STORY]
+    prompt_hint: >-
+      Estruture como um caso: situacao inicial, o que foi feito, resultado.
+      Marque com [INSERIR DADO DO CLIENTE] qualquer numero que o negocio precisa
+      confirmar, para que nada seja inventado.
+    weight: 2
+
+  - key: bastidores
+    label: Bastidores
+    description: Mostra o processo, a rotina, a equipe e o que acontece fora da vitrine.
+    objective: Humanizar a marca e criar vinculo com a audiencia.
+    recommended_formats: [STORY, REEL]
+    prompt_hint: >-
+      Narre em primeira pessoa, com detalhes sensoriais do dia a dia. Mostre o
+      trabalho, nao a perfeicao.
+    weight: 2
+
+  - key: relacionamento
+    label: Relacionamento
+    description: "Conversa direta com a audiencia: perguntas, enquetes, respostas."
+    objective: Aumentar interacao e alimentar o algoritmo com sinais de engajamento.
+    recommended_formats: [STORY, IMAGE_POST]
+    prompt_hint: >-
+      Termine com uma pergunta que a audiencia consiga responder em cinco
+      segundos. Uma pergunta apenas, nunca varias.
+    weight: 2
+
+  - key: entretenimento
+    label: Entretenimento
+    description: Conteudo leve, divertido ou surpreendente, ainda ancorado no negocio.
+    objective: Ampliar alcance com conteudo compartilhavel.
+    recommended_formats: [REEL, STORY]
+    prompt_hint: >-
+      Busque o inesperado dentro do cotidiano do negocio. O humor precisa vir do
+      contexto real, nao de um meme aleatorio.
+    weight: 1
+
+  - key: objecoes
+    label: Objecoes e duvidas
+    description: "Responde de frente o que trava a compra: preco, prazo, receio, comparacao."
+    objective: Remover o atrito que impede a conversao.
+    recommended_formats: [REEL, CAROUSEL]
+    prompt_hint: >-
+      Nomeie a objecao com as palavras que o cliente usaria e responda sem
+      defensividade. Uma objecao por conteudo.
+    weight: 3
+
+  - key: comparacao
+    label: Comparacao
+    description: Compara opcoes, materiais, planos ou caminhos possiveis.
+    objective: Ajudar a escolher e, no processo, evidenciar os diferenciais.
+    recommended_formats: [CAROUSEL, REEL]
+    prompt_hint: >-
+      Compare com honestidade, reconhecendo quando a outra opcao e melhor. A
+      credibilidade e o que faz esse pilar funcionar.
+    weight: 1
+
+  - key: tendencias
+    label: Tendencias
+    description: Conecta o negocio a novidades, estacoes, datas e assuntos do momento.
+    objective: Aproveitar atencao que ja existe na audiencia.
+    recommended_formats: [REEL, STORY]
+    prompt_hint: >-
+      Ancore a tendencia em algo concreto do negocio. Se a ligacao for forcada,
+      escolha outro angulo.
+    weight: 1
+
+  - key: oferta
+    label: Oferta e promocional
+    description: Convite direto a compra, com condicao, prazo ou vantagem clara.
+    objective: Converter a audiencia aquecida em venda.
+    recommended_formats: [IMAGE_POST, STORY, REEL]
+    prompt_hint: >-
+      Deixe explicito o que esta sendo oferecido, para quem e ate quando. Use
+      [INSERIR CONDICAO] quando a condicao comercial nao estiver cadastrada, em
+      vez de inventar descontos.
+    weight: 2

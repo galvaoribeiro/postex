@@ -1,0 +1,18 @@
+export const queryKeys = {
+  session: ["session"] as const,
+  business: ["business"] as const,
+  products: ["products"] as const,
+  services: ["services"] as const,
+  assets: (filters?: Record<string, unknown>) => ["assets", filters] as const,
+  ideas: (filters?: Record<string, unknown>) => ["ideas", filters] as const,
+  idea: (id: string) => ["ideas", id] as const,
+  contents: (filters?: Record<string, unknown>) => ["contents", filters] as const,
+  content: (id: string) => ["content", id] as const,
+  contentVersions: (id: string) => ["content-versions", id] as const,
+  job: (id: string) => ["job", id] as const,
+  dashboard: ["dashboard"] as const,
+  calendar: (year?: number, month?: number) => ["calendar", year, month] as const,
+  taxonomy: ["taxonomy"] as const,
+  formats: ["formats"] as const,
+  capabilities: ["capabilities"] as const,
+};

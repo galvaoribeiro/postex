@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7fb;
+  --foreground: #14161f;
+
+  --brand-50: #f2f0ff;
+  --brand-100: #e6e1ff;
+  --brand-200: #cec4ff;
+  --brand-300: #ab98ff;
+  --brand-400: #8b6cff;
+  --brand-500: #7145ff;
+  --brand-600: #5d2beb;
+  --brand-700: #4b1fc4;
+  --brand-800: #3c1a9c;
+  --brand-900: #301871;
+
+  --surface: #ffffff;
+  --surface-muted: #f0f1f7;
+  --border-subtle: #e5e6f0;
+
+  --success-bg: #e8f8ee;
+  --success-fg: #1c7a45;
+  --warning-bg: #fff6e5;
+  --warning-fg: #92620a;
+  --danger-bg: #fdeaea;
+  --danger-fg: #b52a2a;
+  --info-bg: #e9f0ff;
+  --info-fg: #2952c8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-subtle: var(--border-subtle);
+
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+
+  --color-success-bg: var(--success-bg);
+  --color-success-fg: var(--success-fg);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-fg: var(--warning-fg);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-fg: var(--danger-fg);
+  --color-info-bg: var(--info-bg);
+  --color-info-fg: var(--info-fg);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border-subtle);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--foreground) 15%, transparent);
+  border-radius: 999px;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.6s infinite;
+}

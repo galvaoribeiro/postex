@@ -1,0 +1,36 @@
+# --- Web framework -----------------------------------------------------------
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+python-multipart==0.0.32
+
+# --- Validacao / configuracao ------------------------------------------------
+pydantic==2.13.5
+pydantic-settings==2.15.0
+email-validator==2.3.0
+
+# --- Banco de dados ----------------------------------------------------------
+sqlalchemy==2.0.54
+asyncpg==0.31.0
+greenlet==3.5.6
+alembic==1.20.0
+
+# --- Fila / cache ------------------------------------------------------------
+celery[redis]==5.6.3
+# Limitado a <6.5 por exigencia do kombu 5.6 (dependencia do Celery).
+redis==6.4.0
+
+# --- Armazenamento de objetos (S3 / MinIO) -----------------------------------
+boto3==1.43.98
+
+# --- Seguranca ---------------------------------------------------------------
+pyjwt==2.14.0
+pwdlib[argon2]==0.3.1
+
+# --- IA ----------------------------------------------------------------------
+openai==3.16.2
+
+# --- Utilitarios -------------------------------------------------------------
+tenacity==9.1.4
+structlog==26.1.0
+pyyaml==6.0.3
+httpx==0.28.1
