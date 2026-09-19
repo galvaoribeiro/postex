@@ -6,6 +6,8 @@ export type ContentFormat = "REEL" | "IMAGE_POST" | "CAROUSEL" | "STORY";
 
 export type ContentObjective = "SELL" | "ATTRACT" | "BRAND";
 
+export type VisualTone = "COMMERCIAL" | "DARING";
+
 export type ContentStatus =
   | "IDEA"
   | "DRAFT"

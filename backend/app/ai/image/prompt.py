@@ -1,7 +1,8 @@
 """Montagem do prompt de still.
 
-O texto descreve personagem + produto + cena. Restricoes de seguranca (adulta,
-ficticia, vestida, sem celebridade) vao sempre no prompt, nao so no negativo.
+O texto descreve personagem + produto + cena. O teto de seguranca (adulta,
+ficticia, sem nu, sem menor, sem celebridade) vale em qualquer tom. O tom
+ousado so troca roupa e enquadramento.
 """
 
 from __future__ import annotations
@@ -10,13 +11,31 @@ from app.ai.content_engine import ProductionResult
 from app.ai.context_builder import BusinessContext
 from app.ai.image.base import ImagePrompt
 from app.ai.presenters import Presenter
-from app.models.enums import ContentFormat
+from app.models.enums import ContentFormat, VisualTone
 
-_SAFETY = (
-    "The person is a fictional adult woman, clearly over 25 years old. "
-    "Fully clothed commercial fashion photography. No nudity, no sexual content, "
-    "no children, no teen appearance, not a lookalike of any real celebrity."
+_HARD_SAFETY = (
+    "The person is a fictional adult woman, clearly over 25 years old, "
+    "with the appearance of a woman in her late twenties or thirties. "
+    "Not a lookalike of any real celebrity. Garments stay on."
 )
+
+_COMMERCIAL_LOOK = (
+    "Fully clothed commercial fashion photography. Everyday boutique styling, "
+    "tasteful and suitable for a brand feed."
+)
+
+_DARING_LOOK = (
+    "Tasteful adult campaign photography: lingerie or beachwear (bikini), "
+    "editorial fashion lighting. Skin may show on shoulders, waist, legs and "
+    "tasteful cleavage. Garments stay on. Fashion editorial, campaign still."
+)
+
+_HARD_NEGATIVE = (
+    "child, underage, celebrity lookalike, extra limbs, deformed face, "
+    "text overlay, watermark"
+)
+
+_DARING_NEGATIVE = "adult-film, see-through exposing too much"
 
 
 def size_for_format(content_format: ContentFormat) -> str:
@@ -28,6 +47,17 @@ def size_for_format(content_format: ContentFormat) -> str:
 def parse_size(size: str) -> tuple[int, int]:
     width_s, height_s = size.lower().split("x", 1)
     return int(width_s), int(height_s)
+
+
+def parse_visual_tone(value: object) -> VisualTone:
+    if isinstance(value, VisualTone):
+        return value
+    if isinstance(value, str):
+        try:
+            return VisualTone(value.upper())
+        except ValueError:
+            return VisualTone.COMMERCIAL
+    return VisualTone.COMMERCIAL
 
 
 def _visual_from_production(production: ProductionResult) -> str:
@@ -55,11 +85,12 @@ def build_still_prompt(
     production: ProductionResult,
     presenter: Presenter,
     seed: int,
+    visual_tone: VisualTone | str = VisualTone.COMMERCIAL,
 ) -> ImagePrompt:
+    tone = parse_visual_tone(visual_tone)
     focused = next((item for item in context.products if item.is_focus), None)
     focused_service = next((item for item in context.services if item.is_focus), None)
     offering = focused or focused_service
-    offering_line = ""
     if offering:
         offering_line = (
             f"The commercial subject is '{offering.name}'. "
@@ -72,24 +103,42 @@ def build_still_prompt(
             "No invented product packaging."
         )
 
+    if tone is VisualTone.DARING:
+        clothing_line = (
+            "Clothing: adult campaign lingerie or swimsuit; garments remain on; "
+            "editorial body-positive framing, fashion campaign."
+        )
+        look = _DARING_LOOK
+        negative = f"{presenter.negative_prompt}, {_HARD_NEGATIVE}, {_DARING_NEGATIVE}"
+        visual = (
+            presenter.visual_prompt.replace("fully clothed", "campaign styling")
+            .replace("Fully clothed", "campaign styling")
+        )
+    else:
+        clothing_line = f"Clothing: {presenter.clothing_style}"
+        look = _COMMERCIAL_LOOK
+        negative = f"{presenter.negative_prompt}, {_HARD_NEGATIVE}"
+        visual = presenter.visual_prompt
+
     scene = _visual_from_production(production)
     prompt = "\n".join(
         [
-            presenter.visual_prompt,
+            visual,
             f"Appearance: {presenter.appearance}",
-            f"Clothing: {presenter.clothing_style}",
+            clothing_line,
             offering_line,
             f"Scene: {scene}" if scene else "",
             f"Location vibe: {context.location or 'Brazilian small business'}."
             f" Brand: {context.name}.",
-            "Vertical 9:16 Instagram still, photorealistic, high-end commercial lighting, "
+            "Vertical 9:16 still, photorealistic, high-end commercial lighting, "
             "shallow depth of field, no text overlay, no watermark, no logo invented.",
-            _SAFETY,
+            _HARD_SAFETY,
+            look,
         ]
     )
     return ImagePrompt(
         prompt=" ".join(prompt.split()),
-        negative_prompt=presenter.negative_prompt,
+        negative_prompt=" ".join(negative.split()),
         size=size_for_format(production.content_format),
         seed=seed,
         presenter_id=presenter.id,

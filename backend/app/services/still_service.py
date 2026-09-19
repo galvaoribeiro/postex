@@ -13,13 +13,13 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.ai.content_engine import ProductionResult
 from app.ai.context_builder import BusinessContext
-from app.ai.image.prompt import build_still_prompt
-from app.ai.image.registry import get_image_provider
+from app.ai.image.prompt import build_still_prompt, parse_visual_tone
+from app.ai.image.registry import resolve_cover_provider
 from app.ai.presenters import pick_presenter
 from app.models.asset import Asset
 from app.models.business import Business
 from app.models.content import Content
-from app.models.enums import ContentAssetRole
+from app.models.enums import ContentAssetRole, VisualTone
 from app.services.asset_service import AssetService
 from app.services.content_service import ContentService
 
@@ -40,16 +40,19 @@ class StillService:
         seed: int,
         product_id: uuid.UUID | None = None,
         service_id: uuid.UUID | None = None,
+        visual_tone: VisualTone | str = VisualTone.COMMERCIAL,
     ) -> tuple[Asset, dict[str, object]]:
         presenter = pick_presenter(seed, segment=business.segment)
         content = await self.contents.get(business.id, content.id)
+        tone = parse_visual_tone(visual_tone)
         request = build_still_prompt(
             context=context,
             production=production,
             presenter=presenter,
             seed=seed,
+            visual_tone=tone,
         )
-        generated = await get_image_provider().generate(request)
+        generated = await resolve_cover_provider(tone).generate(request)
 
         asset = await self.assets.create_generated(
             business.id,
@@ -74,6 +77,7 @@ class StillService:
         meta: dict[str, object] = {
             "presenter": presenter.as_dict(),
             "image": generated.metadata(),
+            "visual_tone": tone.value,
         }
         context_blob = dict(content.generation_context or {})
         context_blob.update(meta)

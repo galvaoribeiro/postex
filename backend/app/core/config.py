@@ -29,6 +29,12 @@ class AIProviderName(str, Enum):
     OPENAI = "openai"
 
 
+class ImageProviderName(str, Enum):
+    MOCK = "mock"
+    OPENAI = "openai"
+    FLUX = "flux"
+
+
 class AIExecutionMode(str, Enum):
     """Como as tarefas de IA sao executadas.
 
@@ -101,15 +107,28 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_VISION_MODEL: str = "gpt-4o-mini"
-    OPENAI_IMAGE_MODEL: str = "dall-e-3"
+    OPENAI_IMAGE_MODEL: str = "gpt-image-2"
     OPENAI_TIMEOUT_SECONDS: int = 90
+    # Vazio no `.env` vira None aqui, mas o SDK ainda le a env vazia e perde o
+    # default. Os providers passam `https://api.openai.com/v1` nesse caso.
     OPENAI_BASE_URL: str | None = None
     # Vazio segue `AI_PROVIDER`. Isolado para gerar stills com mock mesmo
     # quando o texto ja usa OpenAI (e vice-versa).
     IMAGE_PROVIDER: str | None = None
+    FAL_KEY: str | None = None
+    FAL_IMAGE_MODEL: str = "fal-ai/flux/dev"
+    FAL_TIMEOUT_SECONDS: int = 120
+    # false = pede a fal para nao filtrar. A conta precisa estar autorizada
+    # no painel da fal.ai; senão o checker continua ativo no servidor.
+    FAL_ENABLE_SAFETY_CHECKER: bool = False
 
     @field_validator(
-        "COOKIE_DOMAIN", "OPENAI_API_KEY", "OPENAI_BASE_URL", "IMAGE_PROVIDER", mode="before"
+        "COOKIE_DOMAIN",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "IMAGE_PROVIDER",
+        "FAL_KEY",
+        mode="before",
     )
     @classmethod
     def _empty_string_to_none(cls, value: object) -> object:
@@ -137,15 +156,15 @@ class Settings(BaseSettings):
         return self.DATABASE_URL.replace("+asyncpg", "")
 
     @property
-    def image_provider_name(self) -> AIProviderName:
+    def image_provider_name(self) -> ImageProviderName:
         if self.IMAGE_PROVIDER:
             try:
-                return AIProviderName(self.IMAGE_PROVIDER.lower())
+                return ImageProviderName(self.IMAGE_PROVIDER.lower())
             except ValueError as exc:
                 raise RuntimeError(
-                    f"IMAGE_PROVIDER invalido: {self.IMAGE_PROVIDER}. Use mock ou openai."
+                    f"IMAGE_PROVIDER invalido: {self.IMAGE_PROVIDER}. Use mock, openai ou flux."
                 ) from exc
-        return self.AI_PROVIDER
+        return ImageProviderName(self.AI_PROVIDER.value)
 
     def validate_runtime(self) -> None:
         """Checagens que devem falhar o boot, nao virar warning silencioso."""
@@ -161,8 +180,10 @@ class Settings(BaseSettings):
 
         if self.AI_PROVIDER is AIProviderName.OPENAI and not self.OPENAI_API_KEY:
             problems.append("AI_PROVIDER=openai exige OPENAI_API_KEY")
-        if self.image_provider_name is AIProviderName.OPENAI and not self.OPENAI_API_KEY:
+        if self.image_provider_name is ImageProviderName.OPENAI and not self.OPENAI_API_KEY:
             problems.append("IMAGE_PROVIDER=openai exige OPENAI_API_KEY")
+        if self.image_provider_name is ImageProviderName.FLUX and not self.FAL_KEY:
+            problems.append("IMAGE_PROVIDER=flux exige FAL_KEY")
 
         if problems:
             raise RuntimeError(

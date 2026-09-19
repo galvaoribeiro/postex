@@ -36,6 +36,21 @@ logger = get_logger(__name__)
 RETRYABLE_ERRORS = (APIConnectionError, APITimeoutError, RateLimitError)
 
 
+def _status_detail(exc: APIStatusError) -> str | None:
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if message:
+                return str(message)[:300]
+        message = body.get("message")
+        if message:
+            return str(message)[:300]
+    text = str(exc)
+    return text[:300] if text else None
+
+
 class OpenAIImageProvider(ImageProvider):
     name: ClassVar[str] = "openai"
 
@@ -47,7 +62,9 @@ class OpenAIImageProvider(ImageProvider):
             )
         self.client = AsyncOpenAI(
             api_key=self.settings.OPENAI_API_KEY,
-            base_url=self.settings.OPENAI_BASE_URL or None,
+            # Nunca passe None: o SDK interpreta OPENAI_BASE_URL="" do .env
+            # como URL sem protocolo e vira APIConnectionError.
+            base_url=self.settings.OPENAI_BASE_URL or "https://api.openai.com/v1",
             timeout=max(self.settings.OPENAI_TIMEOUT_SECONDS, 120),
             max_retries=0,
         )
@@ -70,16 +87,9 @@ class OpenAIImageProvider(ImageProvider):
             reraise=True,
         )
         async def _call() -> Any:
-            kwargs: dict[str, Any] = {
-                "model": model,
-                "prompt": prompt[:4000],
-                "size": request.size,
-                "n": 1,
-            }
-            if model.startswith("dall-e"):
-                kwargs["response_format"] = "b64_json"
-                kwargs["quality"] = "standard"
-            return await self.client.images.generate(**kwargs)
+            return await self.client.images.generate(
+                **self._generate_kwargs(model, prompt, request.size)
+            )
 
         try:
             response = await _call()
@@ -90,14 +100,25 @@ class OpenAIImageProvider(ImageProvider):
         except APITimeoutError as exc:
             raise AIProviderError("A geracao da imagem demorou mais do que o limite.") from exc
         except APIConnectionError as exc:
+            cause = exc.__cause__
+            logger.error(
+                "openai_image_connection_error",
+                model=model,
+                cause=str(cause) if cause else str(exc),
+            )
             raise AIProviderError("Nao foi possivel conectar ao provedor de imagem.") from exc
         except APIStatusError as exc:
+            detail = _status_detail(exc)
             logger.error(
-                "openai_image_status_error", status=exc.status_code, model=model
+                "openai_image_status_error",
+                status=exc.status_code,
+                model=model,
+                detail=detail,
             )
-            raise AIProviderError(
-                f"O provedor de imagem respondeu com erro {exc.status_code}."
-            ) from exc
+            message = f"O provedor de imagem respondeu com erro {exc.status_code}."
+            if detail:
+                message = f"{message} {detail}"
+            raise AIProviderError(message) from exc
 
         data = (getattr(response, "data", None) or [None])[0]
         if data is None:
@@ -123,6 +144,22 @@ class OpenAIImageProvider(ImageProvider):
             prompt=request.prompt,
             latency_ms=latency_ms,
         )
+
+    def _generate_kwargs(self, model: str, prompt: str, size: str) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "prompt": prompt[:4000],
+            "size": size,
+            "n": 1,
+        }
+        if model.startswith("dall-e"):
+            kwargs["response_format"] = "b64_json"
+            kwargs["quality"] = "standard"
+            return kwargs
+        # GPT Image (`gpt-image-2` e sucessores): PNG em base64, sem response_format.
+        kwargs["output_format"] = "png"
+        kwargs["quality"] = "medium"
+        return kwargs
 
     async def _extract_bytes(self, data: Any) -> bytes:
         b64 = getattr(data, "b64_json", None)

@@ -59,6 +59,17 @@ async def test_content_creation_job_produces_draft(
     assert idea["status"] == "USED"
 
 
+async def test_daring_cover_still_uses_mock_without_fal_key(
+    user_with_business: ApiUser,
+) -> None:
+    job = await _generate(
+        user_with_business.client, objective="BRAND", visual_tone="DARING"
+    )
+    assert job["status"] == "COMPLETED"
+    assert job["result"]["image"]["provider"] == "mock"
+    assert job["result"]["visual_tone"] == "DARING"
+
+
 async def test_sell_without_item_is_rejected(user_with_business: ApiUser) -> None:
     response = await user_with_business.client.post(
         "/api/v1/contents/generate", json={"objective": "SELL"}

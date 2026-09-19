@@ -16,6 +16,7 @@ from app.models.enums import (
     IdeaStatus,
     RegenerationScope,
     VersionAuthor,
+    VisualTone,
 )
 from app.schemas.asset import AssetRead
 from app.schemas.common import APIModel, APIRequest
@@ -74,6 +75,7 @@ class ContentGenerateRequest(APIRequest):
     )
     answers: dict[str, str] = Field(default_factory=dict)
     planned_date: date | None = None
+    visual_tone: VisualTone = VisualTone.COMMERCIAL
 
     @model_validator(mode="after")
     def validate_item_for_objective(self) -> ContentGenerateRequest:

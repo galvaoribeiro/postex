@@ -12,6 +12,7 @@ import type {
   JobAccepted,
   Page,
   RegenerationScope,
+  VisualTone,
 } from "./types";
 
 export const contentsApi = {
@@ -22,6 +23,7 @@ export const contentsApi = {
     format?: ContentFormat | null;
     answers?: Record<string, string>;
     planned_date?: string | null;
+    visual_tone?: VisualTone;
   }) => api.post<JobAccepted>("/contents/generate", payload),
 
   generateQuestions: (params: {

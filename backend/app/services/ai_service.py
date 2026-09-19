@@ -92,6 +92,7 @@ class AIService:
                 "format": data.format.value if data.format else None,
                 "instruction": instruction,
                 "planned_date": data.planned_date.isoformat() if data.planned_date else None,
+                "visual_tone": data.visual_tone.value,
             },
         )
 

@@ -261,6 +261,7 @@ async def _handle_content_creation(
     format_hint = ContentFormat(payload["format"]) if payload.get("format") else None
     instruction = payload.get("instruction")
     planned_date = payload.get("planned_date")
+    visual_tone = payload.get("visual_tone")
 
     provider = get_ai_provider()
     context = await ContextBuilder(session).build(
@@ -318,6 +319,7 @@ async def _handle_content_creation(
         seed=int(job_id.int % 1_000_000),
         product_id=product_id,
         service_id=service_id,
+        visual_tone=visual_tone,
     )
     await mark("finalizando", 92)
     await idea_service.mark_used(idea)
@@ -330,5 +332,6 @@ async def _handle_content_creation(
         "stages": stages,
         "presenter": still_meta.get("presenter"),
         "image": still_meta.get("image"),
+        "visual_tone": still_meta.get("visual_tone"),
         "provider": production.provider_metadata,
     }

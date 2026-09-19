@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageSpinner } from "@/components/ui/spinner";
 import { dashboardApi } from "@/lib/api/dashboard";
-import type { ContentObjective, QuickCreateItem } from "@/lib/api/types";
+import type { ContentObjective, QuickCreateItem, VisualTone } from "@/lib/api/types";
 import { queryKeys } from "@/lib/query-keys";
 import { addDays, cn, formatCurrency, startOfWeekMonday, toIsoDate } from "@/lib/utils";
 
@@ -21,6 +21,11 @@ const OBJECTIVES: { value: ContentObjective; label: string; description: string 
   { value: "SELL", label: "Vender", description: "Convencer a pessoa a comprar." },
   { value: "ATTRACT", label: "Atrair clientes", description: "Trazer gente nova para o perfil." },
   { value: "BRAND", label: "Fortalecer a marca", description: "Mostrar quem voce e." },
+];
+
+const VISUAL_TONES: { value: VisualTone; label: string; description: string }[] = [
+  { value: "COMMERCIAL", label: "Comercial", description: "Capa de marca, roupa de loja." },
+  { value: "DARING", label: "Ousado", description: "Lingerie ou praia, sem ser explicito." },
 ];
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
@@ -34,6 +39,7 @@ export default function InicioPage() {
   const [item, setItem] = useState<QuickCreateItem | null>(null);
   const [brandOnly, setBrandOnly] = useState(true);
   const [objective, setObjective] = useState<ContentObjective | null>(null);
+  const [visualTone, setVisualTone] = useState<VisualTone>("COMMERCIAL");
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.dashboard,
@@ -87,7 +93,7 @@ export default function InicioPage() {
       toast.error("Para vender, escolha um produto ou servico.");
       return;
     }
-    const params = new URLSearchParams({ objective });
+    const params = new URLSearchParams({ objective, visual: visualTone });
     if (item && !brandOnly) {
       params.set(item.kind === "product" ? "product" : "service", item.id);
     }
@@ -153,6 +159,30 @@ export default function InicioPage() {
             </button>
           ))}
         </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {VISUAL_TONES.map((entry) => (
+            <button
+              key={entry.value}
+              type="button"
+              onClick={() => setVisualTone(entry.value)}
+              className={cn(
+                "rounded-2xl border px-4 py-4 text-left transition-colors",
+                visualTone === entry.value
+                  ? "border-brand-500 bg-brand-50"
+                  : "border-border-subtle bg-surface hover:border-brand-200"
+              )}
+            >
+              <p className="font-semibold text-foreground">{entry.label}</p>
+              <p className="mt-1 text-xs text-foreground/55">{entry.description}</p>
+            </button>
+          ))}
+        </div>
+        {visualTone === "DARING" && (
+          <p className="mt-2 text-xs text-foreground/50">
+            Melhor para moda, praia e marca adulta. Pode limitar alcance no Instagram e no TikTok.
+          </p>
+        )}
 
         <Button className="mt-4" size="lg" onClick={handleCreate}>
           Criar conteudo

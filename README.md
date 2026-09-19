@@ -138,7 +138,8 @@ Veja `.env.example` para a lista completa e comentada. Pontos importantes:
   Troque para `openai` e preencha `OPENAI_API_KEY` para usar IA real.
 - `IMAGE_PROVIDER` segue `AI_PROVIDER` se vazio. Use `mock` para stills locais
   mesmo com texto real (sem gastar credito de imagem). Still real: `openai` +
-  `OPENAI_IMAGE_MODEL` (padrao `dall-e-3`).
+  `OPENAI_IMAGE_MODEL` (padrao `gpt-image-2`) ou `flux` + `FAL_KEY` (fal.ai).
+  Tom ousado no Criar usa Flux automaticamente quando `FAL_KEY` existe.
 - `AI_EXECUTION_MODE`: `celery` (producao, exige worker) ou `inline` (executa no
   processo da API, util para dev/testes sem worker).
 - Nenhuma chave de IA e exposta ao frontend; todas as chamadas de IA passam pelo

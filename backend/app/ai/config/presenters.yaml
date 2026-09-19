@@ -27,7 +27,7 @@ presenters:
       boutique clothing, commercial lifestyle photography, natural makeup,
       fully clothed.
     negative_prompt: >
-      child, teen, underage, nude, sexual, celebrity lookalike, extra limbs,
+      child, underage, celebrity lookalike, extra limbs,
       deformed face, text overlay, watermark, logo invented on product
     accent: "#7c3aed"
 
@@ -52,7 +52,7 @@ presenters:
       hair, elegant commercial portrait, luxury beauty/fashion lighting, neutral
       tailored outfit, fully clothed, calm confident expression.
     negative_prompt: >
-      child, teen, underage, nude, sexual, celebrity lookalike, extra limbs,
+      child, underage, celebrity lookalike, extra limbs,
       deformed face, text overlay, watermark
     accent: "#0f766e"
 
@@ -77,6 +77,6 @@ presenters:
       warm brown skin, candid UGC smartphone photo style, casual contemporary
       clothes, natural daylight, fully clothed, friendly smile.
     negative_prompt: >
-      child, teen, underage, nude, sexual, celebrity lookalike, extra limbs,
+      child, underage, celebrity lookalike, extra limbs,
       deformed face, text overlay, watermark, studio glamour
     accent: "#c2410c"

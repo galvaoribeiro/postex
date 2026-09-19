@@ -49,7 +49,7 @@ class OpenAIProvider(AIProvider):
             )
         self.client = AsyncOpenAI(
             api_key=self.settings.OPENAI_API_KEY,
-            base_url=self.settings.OPENAI_BASE_URL or None,
+            base_url=self.settings.OPENAI_BASE_URL or "https://api.openai.com/v1",
             timeout=self.settings.OPENAI_TIMEOUT_SECONDS,
             max_retries=0,  # as retentativas ficam com o tenacity, abaixo
         )
@@ -120,6 +120,13 @@ class OpenAIProvider(AIProvider):
         except APITimeoutError as exc:
             raise AIProviderError("A geracao demorou mais do que o limite configurado.") from exc
         except APIConnectionError as exc:
+            cause = exc.__cause__
+            logger.error(
+                "openai_connection_error",
+                prompt=prompt.name,
+                model=model,
+                cause=str(cause) if cause else str(exc),
+            )
             raise AIProviderError("Nao foi possivel conectar ao provedor de IA.") from exc
         except APIStatusError as exc:
             logger.error(
