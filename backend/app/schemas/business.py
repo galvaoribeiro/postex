@@ -20,6 +20,8 @@ class ContentPreferencesSchema(APIRequest):
     emoji_usage: str = Field(default="moderado", max_length=24)
     forbidden_topics: list[str] = Field(default_factory=list, max_length=20)
     extra_guidelines: str = Field(default="", max_length=1000)
+    default_cta: str = Field(default="", max_length=40)
+    whatsapp: str = Field(default="", max_length=32)
 
 
 class BusinessBase(APIRequest):

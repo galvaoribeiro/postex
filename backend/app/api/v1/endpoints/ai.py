@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.ai.content_engine import MAX_IDEAS_PER_RUN
 from app.ai.production import all_strategies
+from app.ai.image.registry import get_image_provider
 from app.ai.registry import get_ai_provider
 from app.ai.taxonomy import get_taxonomy
 from app.core.config import settings
@@ -55,10 +56,13 @@ async def list_formats(user: CurrentUser) -> list[FormatRead]:
 @router.get("/capabilities", response_model=AICapabilitiesRead)
 async def get_capabilities(user: CurrentUser) -> AICapabilitiesRead:
     provider = get_ai_provider()
+    image = get_image_provider()
     return AICapabilitiesRead(
         provider=provider.name,
         model=provider.default_model,
         supports_vision=provider.supports_vision,
+        image_provider=image.name,
+        image_model=image.default_model,
         execution_mode=settings.AI_EXECUTION_MODE.value,
         taxonomy_version=get_taxonomy().version,
         default_idea_count=settings.AI_DEFAULT_IDEA_COUNT,

@@ -13,7 +13,10 @@ from dataclasses import asdict, dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.types import ImageRef, PromptHints
+from app.models.asset import Asset
 from app.models.business import Business
+from app.models.catalog import Product, Service
+from app.models.enums import AssetStatus
 from app.repositories.asset import AssetRepository
 from app.repositories.catalog import ProductRepository, ServiceRepository
 from app.repositories.content import ContentRepository
@@ -33,14 +36,17 @@ class ProductContext:
     price: float | None
     currency: str
     highlights: tuple[str, ...]
+    is_focus: bool = False
 
-    def render(self) -> str:
+    def render(self, *, brief: bool = False) -> str:
         parts = [f"- {self.name}"]
         if self.category:
             parts.append(f"(categoria: {self.category})")
         if self.price is not None:
             parts.append(f"| preco: {self.currency} {self.price:.2f}")
         line = " ".join(parts)
+        if brief:
+            return line
         if self.description:
             line += f"\n    descricao: {self.description}"
         if self.highlights:
@@ -57,8 +63,9 @@ class ServiceContext:
     currency: str
     duration_minutes: int | None
     deliverables: tuple[str, ...]
+    is_focus: bool = False
 
-    def render(self) -> str:
+    def render(self, *, brief: bool = False) -> str:
         parts = [f"- {self.name}"]
         if self.category:
             parts.append(f"(categoria: {self.category})")
@@ -67,6 +74,8 @@ class ServiceContext:
         if self.duration_minutes:
             parts.append(f"| duracao: {self.duration_minutes} min")
         line = " ".join(parts)
+        if brief:
+            return line
         if self.description:
             line += f"\n    descricao: {self.description}"
         if self.deliverables:
@@ -125,6 +134,8 @@ class ContentPreferences:
     emoji_usage: str = "moderado"
     forbidden_topics: tuple[str, ...] = ()
     extra_guidelines: str = ""
+    default_cta: str = ""
+    whatsapp: str = ""
 
     @classmethod
     def from_dict(cls, raw: dict | None) -> "ContentPreferences":
@@ -138,6 +149,8 @@ class ContentPreferences:
             emoji_usage=str(raw.get("emoji_usage") or "moderado"),
             forbidden_topics=tuple(raw.get("forbidden_topics") or ()),
             extra_guidelines=str(raw.get("extra_guidelines") or ""),
+            default_cta=str(raw.get("default_cta") or ""),
+            whatsapp=str(raw.get("whatsapp") or ""),
         )
 
     def render(self) -> str:
@@ -154,6 +167,10 @@ class ContentPreferences:
             lines.append(f"- pilares a evitar: {', '.join(self.avoided_categories)}")
         if self.forbidden_topics:
             lines.append(f"- assuntos proibidos: {', '.join(self.forbidden_topics)}")
+        if self.default_cta:
+            lines.append(f"- CTA padrao: {self.default_cta}")
+        if self.whatsapp:
+            lines.append(f"- WhatsApp: {self.whatsapp}")
         if self.extra_guidelines:
             lines.append(f"- diretrizes adicionais: {self.extra_guidelines}")
         return "\n".join(lines)
@@ -205,20 +222,45 @@ class BusinessContext:
         if self.additional_info:
             sections.append(f"Informacoes adicionais: {self.additional_info}")
 
-        if self.products:
+        focused_product = next((item for item in self.products if item.is_focus), None)
+        focused_service = next((item for item in self.services if item.is_focus), None)
+        if focused_product or focused_service:
+            kind = "produto" if focused_product else "servico"
+            focused = focused_product or focused_service
+            assert focused is not None
             sections.append(
-                "\n## PRODUTOS CADASTRADOS\n"
-                + "\n".join(product.render() for product in self.products)
+                f"\n## FOCO DESTE CONTEUDO\n"
+                f"Este conteudo e sobre o {kind} abaixo. Priorize-o; o restante "
+                f"do catalogo e so contexto.\n"
+                f"{focused.render()}"
             )
-        else:
+
+        other_products = tuple(item for item in self.products if not item.is_focus)
+        if other_products:
+            header = (
+                "\n## OUTROS PRODUTOS (contexto secundario)\n"
+                if focused_product or focused_service
+                else "\n## PRODUTOS CADASTRADOS\n"
+            )
+            brief = bool(focused_product or focused_service)
+            sections.append(
+                header + "\n".join(product.render(brief=brief) for product in other_products)
+            )
+        elif not focused_product:
             sections.append("\n## PRODUTOS CADASTRADOS\n(nenhum produto cadastrado)")
 
-        if self.services:
-            sections.append(
-                "\n## SERVICOS CADASTRADOS\n"
-                + "\n".join(service.render() for service in self.services)
+        other_services = tuple(item for item in self.services if not item.is_focus)
+        if other_services:
+            header = (
+                "\n## OUTROS SERVICOS (contexto secundario)\n"
+                if focused_product or focused_service
+                else "\n## SERVICOS CADASTRADOS\n"
             )
-        else:
+            brief = bool(focused_product or focused_service)
+            sections.append(
+                header + "\n".join(service.render(brief=brief) for service in other_services)
+            )
+        elif not focused_service:
             sections.append("\n## SERVICOS CADASTRADOS\n(nenhum servico cadastrado)")
 
         if self.assets:
@@ -277,6 +319,10 @@ class BusinessContext:
             instruction=instruction,
             image_labels=image_labels,
             seed=seed,
+            focus_name=next(
+                (item.name for item in (*self.products, *self.services) if item.is_focus),
+                None,
+            ),
         )
 
     def image_refs(self, *, limit: int = 4) -> tuple[ImageRef, ...]:
@@ -311,16 +357,28 @@ class ContextBuilder:
         business: Business,
         *,
         include_image_urls: bool = False,
+        focus_product_id: uuid.UUID | None = None,
+        focus_service_id: uuid.UUID | None = None,
     ) -> BusinessContext:
         """Monta o contexto completo do negocio.
 
         `include_image_urls=True` acrescenta URLs assinadas das imagens, usado
         somente quando o provedor selecionado suporta visao (gerar URL para
         todo mundo seria desperdicio e exposicao desnecessaria).
+
+        Com `focus_product_id` / `focus_service_id`, o item vai para
+        `## FOCO DESTE CONTEUDO` e seus assets sobem ao topo. Sem foco, o
+        comportamento permanece o de sempre.
         """
-        products = await self.products.list_active(business.id)
-        services = await self.services.list_active(business.id)
-        assets = await self.assets.list_ready_images(business.id, limit=MAX_CONTEXT_ASSETS)
+        products = list(await self.products.list_active(business.id))
+        services = list(await self.services.list_active(business.id))
+        products = await self._with_focus(products, focus_product_id, self.products, business.id)
+        services = await self._with_focus(services, focus_service_id, self.services, business.id)
+        assets = await self._collect_assets(
+            business.id,
+            focus_product_id=focus_product_id,
+            focus_service_id=focus_service_id,
+        )
         recent = await self.contents.list_recent(business.id, limit=MAX_RECENT_CONTENTS)
 
         product_names = {product.id: product.name for product in products}
@@ -373,26 +431,11 @@ class ContextBuilder:
             completeness_score=business.completeness_score,
             preferences=ContentPreferences.from_dict(business.content_preferences),
             products=tuple(
-                ProductContext(
-                    name=product.name,
-                    description=product.description,
-                    category=product.category,
-                    price=float(product.price) if product.price is not None else None,
-                    currency=product.currency,
-                    highlights=tuple(product.highlights or ()),
-                )
+                self._product_context(product, focus_id=focus_product_id)
                 for product in products[:MAX_CONTEXT_PRODUCTS]
             ),
             services=tuple(
-                ServiceContext(
-                    name=service.name,
-                    description=service.description,
-                    category=service.category,
-                    price=float(service.price) if service.price is not None else None,
-                    currency=service.currency,
-                    duration_minutes=service.duration_minutes,
-                    deliverables=tuple(service.deliverables or ()),
-                )
+                self._service_context(service, focus_id=focus_service_id)
                 for service in services[:MAX_CONTEXT_SERVICES]
             ),
             assets=tuple(asset_contexts),
@@ -406,4 +449,80 @@ class ContextBuilder:
                 )
                 for content in recent
             ),
+        )
+
+    @staticmethod
+    async def _with_focus(
+        items: list,
+        focus_id: uuid.UUID | None,
+        repository: ProductRepository | ServiceRepository,
+        business_id: uuid.UUID,
+    ) -> list:
+        """Garante que o item focado venha primeiro, mesmo se estiver inativo."""
+        if focus_id is None:
+            return items
+        focused = next((item for item in items if item.id == focus_id), None)
+        if focused is None:
+            focused = await repository.get_for_business(business_id, focus_id)
+            if focused is None:
+                return items
+            return [focused, *items]
+        return [focused, *[item for item in items if item.id != focus_id]]
+
+    async def _collect_assets(
+        self,
+        business_id: uuid.UUID,
+        *,
+        focus_product_id: uuid.UUID | None,
+        focus_service_id: uuid.UUID | None,
+    ) -> list[Asset]:
+        focused: list[Asset] = []
+        if focus_product_id:
+            focused = list(
+                await self.assets.list_filtered(
+                    business_id,
+                    status=AssetStatus.READY,
+                    product_id=focus_product_id,
+                    limit=MAX_CONTEXT_ASSETS,
+                )
+            )
+        elif focus_service_id:
+            focused = list(
+                await self.assets.list_filtered(
+                    business_id,
+                    status=AssetStatus.READY,
+                    service_id=focus_service_id,
+                    limit=MAX_CONTEXT_ASSETS,
+                )
+            )
+        focused = [asset for asset in focused if asset.mime_type.startswith("image/")]
+
+        others = list(await self.assets.list_ready_images(business_id, limit=MAX_CONTEXT_ASSETS))
+        seen = {asset.id for asset in focused}
+        merged = focused + [asset for asset in others if asset.id not in seen]
+        return merged[:MAX_CONTEXT_ASSETS]
+
+    @staticmethod
+    def _product_context(product: Product, *, focus_id: uuid.UUID | None) -> ProductContext:
+        return ProductContext(
+            name=product.name,
+            description=product.description,
+            category=product.category,
+            price=float(product.price) if product.price is not None else None,
+            currency=product.currency,
+            highlights=tuple(product.highlights or ()),
+            is_focus=focus_id is not None and product.id == focus_id,
+        )
+
+    @staticmethod
+    def _service_context(service: Service, *, focus_id: uuid.UUID | None) -> ServiceContext:
+        return ServiceContext(
+            name=service.name,
+            description=service.description,
+            category=service.category,
+            price=float(service.price) if service.price is not None else None,
+            currency=service.currency,
+            duration_minutes=service.duration_minutes,
+            deliverables=tuple(service.deliverables or ()),
+            is_focus=focus_id is not None and service.id == focus_id,
         )

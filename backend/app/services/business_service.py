@@ -75,7 +75,10 @@ class BusinessService:
         if "content_preferences" in payload:
             preferences_schema = data.content_preferences
             payload["content_preferences"] = (
-                self._validated_preferences(preferences_schema)
+                self._merge_preferences(
+                    business.content_preferences,
+                    self._validated_preferences(preferences_schema),
+                )
                 if preferences_schema is not None
                 else default_content_preferences()
             )
@@ -120,6 +123,19 @@ class BusinessService:
         data = preferences.model_dump(mode="json")
         data["forbidden_topics"] = self._clean_list(data["forbidden_topics"])
         return data
+
+    @staticmethod
+    def _merge_preferences(existing: dict | None, incoming: dict) -> dict:
+        """Preserva chaves JSON extras e nao apaga CTA/whatsapp so porque o form omitiu."""
+        merged = dict(existing or {})
+        merged.update(incoming)
+        existing_cta = (existing or {}).get("default_cta")
+        existing_whatsapp = (existing or {}).get("whatsapp")
+        if not str(incoming.get("default_cta") or "").strip() and existing_cta:
+            merged["default_cta"] = existing_cta
+        if not str(incoming.get("whatsapp") or "").strip() and existing_whatsapp:
+            merged["whatsapp"] = existing_whatsapp
+        return merged
 
     @staticmethod
     def _clean_list(values: list[str] | None) -> list[str]:

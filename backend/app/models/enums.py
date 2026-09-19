@@ -123,10 +123,23 @@ class RegenerationScope(str, Enum):
     CTA = "CTA"
 
 
+class ContentObjective(str, Enum):
+    """Objetivo do conteudo na linguagem do usuario.
+
+    A UI expoe so estes tres valores. O mapeamento para pilares da taxonomia
+    editorial vive em `app.ai.taxonomy.OBJECTIVE_PILLARS`.
+    """
+
+    SELL = "SELL"  # vender
+    ATTRACT = "ATTRACT"  # atrair clientes
+    BRAND = "BRAND"  # fortalecer a marca
+
+
 class JobKind(str, Enum):
     IDEATION = "IDEATION"
     CONTENT_PRODUCTION = "CONTENT_PRODUCTION"
     CONTENT_REGENERATION = "CONTENT_REGENERATION"
+    CONTENT_CREATION = "CONTENT_CREATION"
     ASSET_ANALYSIS = "ASSET_ANALYSIS"
 
 

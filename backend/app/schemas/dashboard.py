@@ -30,14 +30,22 @@ class CalendarCoverage(APIModel):
 
 
 class NextAction(APIModel):
-    """A resposta para 'o que voce deve postar hoje?'."""
+    """A resposta para 'o que voce deve fazer agora?'."""
 
-    kind: str = Field(description="publish_today | review | pick_idea | generate_ideas | setup")
+    kind: str = Field(description="review | create")
     title: str
     description: str
     cta_label: str
     content_id: str | None = None
     idea_id: str | None = None
+    href: str | None = None
+
+
+class QuickCreateItem(APIModel):
+    id: str
+    kind: str
+    name: str
+    price: float | None = None
 
 
 class DashboardRead(APIModel):
@@ -52,6 +60,7 @@ class DashboardRead(APIModel):
     recent: list[ContentSummary]
     top_ideas: list[ContentIdeaRead]
     active_jobs: int
+    quick_create: list[QuickCreateItem] = Field(default_factory=list)
 
 
 class CalendarDay(APIModel):

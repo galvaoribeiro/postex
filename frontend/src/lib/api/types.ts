@@ -4,6 +4,8 @@
 
 export type ContentFormat = "REEL" | "IMAGE_POST" | "CAROUSEL" | "STORY";
 
+export type ContentObjective = "SELL" | "ATTRACT" | "BRAND";
+
 export type ContentStatus =
   | "IDEA"
   | "DRAFT"
@@ -45,6 +47,7 @@ export type JobKind =
   | "IDEATION"
   | "CONTENT_PRODUCTION"
   | "CONTENT_REGENERATION"
+  | "CONTENT_CREATION"
   | "ASSET_ANALYSIS";
 
 export type JobStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -76,6 +79,8 @@ export interface ContentPreferences {
   emoji_usage: string;
   forbidden_topics: string[];
   extra_guidelines: string;
+  default_cta?: string;
+  whatsapp?: string;
 }
 
 export interface BusinessRead {
@@ -244,6 +249,7 @@ export interface ContentRead {
   current_version: number;
   created_at: string;
   updated_at: string;
+  presenter_name: string | null;
   assets: ContentAssetRead[];
   allowed_transitions: ContentStatus[];
 }
@@ -290,6 +296,7 @@ export interface JobRead {
   kind: JobKind;
   status: JobStatus;
   progress: number;
+  stage?: string | null;
   provider: string | null;
   result: Record<string, unknown> | null;
   error_message: string | null;
@@ -331,6 +338,8 @@ export interface AICapabilitiesRead {
   provider: string;
   model: string;
   supports_vision: boolean;
+  image_provider: string;
+  image_model: string;
   execution_mode: string;
   taxonomy_version: number;
   default_idea_count: number;
@@ -363,6 +372,14 @@ export interface NextAction {
   cta_label: string;
   content_id: string | null;
   idea_id: string | null;
+  href?: string | null;
+}
+
+export interface QuickCreateItem {
+  id: string;
+  kind: "product" | "service";
+  name: string;
+  price: number | null;
 }
 
 export interface DashboardRead {
@@ -377,6 +394,21 @@ export interface DashboardRead {
   recent: ContentSummary[];
   top_ideas: ContentIdeaRead[];
   active_jobs: number;
+  quick_create?: QuickCreateItem[];
+}
+
+export interface QuestionOption {
+  value: string;
+  label: string;
+}
+
+export interface CreationQuestion {
+  key: string;
+  question: string;
+  kind: "choice" | "text" | "money" | "skip_only";
+  options: QuestionOption[];
+  optional: boolean;
+  persist_to: string | null;
 }
 
 export interface CalendarDay {

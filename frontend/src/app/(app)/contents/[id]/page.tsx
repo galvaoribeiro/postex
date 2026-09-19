@@ -5,9 +5,11 @@ import {
   ArrowLeft,
   Calendar,
   Check,
+  ChevronDown,
   Copy,
   History,
   Image as ImageIcon,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Trash2,
@@ -18,6 +20,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { ContentPreview } from "@/components/domain/content-preview";
 import { FormatBadge } from "@/components/domain/format-badge";
 import { PayloadEditor } from "@/components/domain/payload-editor";
 import { ContentStatusBadge } from "@/components/domain/status-badge";
@@ -36,7 +39,7 @@ import { contentsApi } from "@/lib/api/contents";
 import type { ContentFormat, ContentRead, ContentStatus, RegenerationScope } from "@/lib/api/types";
 import { useJobWatcher } from "@/lib/hooks/use-job-watcher";
 import { queryKeys } from "@/lib/query-keys";
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatDate, formatDateTime, cn } from "@/lib/utils";
 
 const STATUS_LABELS: Record<ContentStatus, string> = {
   IDEA: "Ideia",
@@ -99,6 +102,10 @@ function ContentEditor({ content, contentId }: { content: ContentRead; contentId
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState(content.planned_date ?? "");
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -155,10 +162,51 @@ function ContentEditor({ content, contentId }: { content: ContentRead; contentId
     },
   });
 
+  const approveMutation = useMutation({
+    mutationFn: () => contentsApi.approve(contentId),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.content(contentId), updated);
+      queryClient.invalidateQueries({ queryKey: ["contents"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      toast.success("Conteudo aprovado.");
+    },
+    onError: (error: unknown) =>
+      toast.error(error instanceof ApiError ? error.message : "Nao foi possivel aprovar."),
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: (date: string) => contentsApi.schedule(contentId, date),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.content(contentId), updated);
+      queryClient.invalidateQueries({ queryKey: ["contents"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      setScheduleOpen(false);
+      toast.success("Data planejada.");
+    },
+    onError: (error: unknown) =>
+      toast.error(error instanceof ApiError ? error.message : "Nao foi possivel agendar."),
+  });
+
+  async function handleRedo() {
+    try {
+      const { job_id } = await contentsApi.regenerate(contentId, { scope: "FULL" });
+      await watch(job_id, "CONTENT_REGENERATION", {
+        loadingMessage: "Refazendo conteudo...",
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.content(contentId) }),
+      });
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Nao foi possivel refazer.");
+    }
+  }
+
   const unlinkAssetMutation = useMutation({
     mutationFn: (assetId: string) => contentsApi.unlinkAsset(contentId, assetId),
     onSuccess: (updated) => queryClient.setQueryData(queryKeys.content(contentId), updated),
   });
+
+  const canApprove = content.status === "DRAFT" || content.status === "REVIEW";
+  const alreadyApproved = content.status === "APPROVED" || content.status === "SCHEDULED";
 
   const isDirty =
     title !== content.title ||
@@ -184,51 +232,89 @@ function ContentEditor({ content, contentId }: { content: ContentRead; contentId
             <ContentStatusBadge status={content.status} />
             <Badge tone="neutral">v{content.current_version}</Badge>
           </div>
-          <Input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            className="h-auto border-none px-0 text-2xl font-semibold shadow-none focus:ring-0"
-          />
+          <h1 className="text-2xl font-semibold text-foreground">{content.title}</h1>
           <p className="mt-1 text-xs text-foreground/45">
             Criado em {formatDate(content.created_at)} - atualizado em {formatDateTime(content.updated_at)}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" icon={<History className="h-4 w-4" />} onClick={() => setVersionsOpen(true)}>
-            Versoes
+      </div>
+
+      <ContentPreview
+        className="mb-6"
+        content={{ ...content, title, caption, cta, hashtags, payload, planned_date: plannedDate || content.planned_date }}
+      />
+
+      <div className="mb-6 flex flex-wrap items-center justify-center gap-2">
+        <Button
+          icon={<Check className="h-4 w-4" />}
+          onClick={() => approveMutation.mutate()}
+          loading={approveMutation.isPending}
+          disabled={!canApprove || alreadyApproved}
+        >
+          {alreadyApproved ? "Aprovado" : "Aprovar"}
+        </Button>
+        <Button variant="outline" icon={<RefreshCw className="h-4 w-4" />} onClick={() => void handleRedo()}>
+          Refazer
+        </Button>
+        <Button variant="outline" icon={<Calendar className="h-4 w-4" />} onClick={() => setScheduleOpen(true)}>
+          Agendar
+        </Button>
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setMoreOpen((open) => !open)}
+            aria-label="Mais acoes"
+          >
+            <MoreHorizontal className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" icon={<Copy className="h-4 w-4" />} onClick={() => duplicateMutation.mutate()} loading={duplicateMutation.isPending}>
-            Duplicar
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setChangeFormatOpen(true)}>
-            Trocar formato
-          </Button>
-          <Button variant="outline" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => setRegenerateOpen(true)}>
-            Regenerar
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => setDeleteOpen(true)} aria-label="Excluir">
-            <Trash2 className="h-4 w-4 text-danger-fg" />
-          </Button>
+          {moreOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
+              <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-xl border border-border-subtle bg-surface shadow-lg">
+                <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-surface-muted" onClick={() => { setMoreOpen(false); setVersionsOpen(true); }}>
+                  <History className="h-4 w-4" /> Versoes
+                </button>
+                <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-surface-muted" onClick={() => { setMoreOpen(false); duplicateMutation.mutate(); }}>
+                  <Copy className="h-4 w-4" /> Duplicar
+                </button>
+                <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-surface-muted" onClick={() => { setMoreOpen(false); setChangeFormatOpen(true); }}>
+                  Trocar formato
+                </button>
+                <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-surface-muted" onClick={() => { setMoreOpen(false); setRegenerateOpen(true); }}>
+                  Regenerar por escopo
+                </button>
+                {content.allowed_transitions
+                  .filter((status) => status !== "REVIEW" && status !== "APPROVED")
+                  .map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-surface-muted"
+                      onClick={() => { setMoreOpen(false); statusMutation.mutate(status); }}
+                    >
+                      {STATUS_LABELS[status]}
+                    </button>
+                  ))}
+                <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger-fg hover:bg-danger-bg" onClick={() => { setMoreOpen(false); setDeleteOpen(true); }}>
+                  <Trash2 className="h-4 w-4" /> Excluir
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {content.allowed_transitions.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-border-subtle bg-surface-muted/50 p-3">
-          <span className="self-center text-xs font-medium text-foreground/50">Acoes:</span>
-          {content.allowed_transitions.map((status) => (
-            <Button
-              key={status}
-              size="sm"
-              variant={status === "APPROVED" ? "primary" : status === "REJECTED" || status === "ARCHIVED" ? "danger" : "outline"}
-              onClick={() => statusMutation.mutate(status)}
-              loading={statusMutation.isPending && statusMutation.variables === status}
-            >
-              {STATUS_LABELS[status]}
-            </Button>
-          ))}
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={() => setAdjustOpen((open) => !open)}
+        className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-foreground/70 hover:text-foreground"
+      >
+        <ChevronDown className={cn("h-4 w-4 transition-transform", adjustOpen && "rotate-180")} />
+        Ajustar
+      </button>
 
+      {adjustOpen && (
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
@@ -236,6 +322,10 @@ function ContentEditor({ content, contentId }: { content: ContentRead; contentId
               <CardTitle>Conceito</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div>
+                <Label>Titulo</Label>
+                <Input value={title} onChange={(event) => setTitle(event.target.value)} />
+              </div>
               <div>
                 <Label>Categoria / pilar</Label>
                 <Input value={category} onChange={(event) => setCategory(event.target.value)} />
@@ -340,6 +430,36 @@ function ContentEditor({ content, contentId }: { content: ContentRead; contentId
           </Card>
         </div>
       </div>
+      )}
+
+      <Dialog
+        open={scheduleOpen}
+        onClose={() => setScheduleOpen(false)}
+        title="Agendar"
+        description="Define o dia no calendario. A publicacao automatica no Instagram ainda nao existe."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setScheduleOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => scheduleMutation.mutate(scheduleDate)}
+              disabled={!scheduleDate}
+              loading={scheduleMutation.isPending}
+            >
+              Confirmar data
+            </Button>
+          </>
+        }
+      >
+        <Label htmlFor="detail_planned_date">Dia</Label>
+        <Input
+          id="detail_planned_date"
+          type="date"
+          value={scheduleDate}
+          onChange={(event) => setScheduleDate(event.target.value)}
+        />
+      </Dialog>
 
       <RegenerateDialog
         open={regenerateOpen}

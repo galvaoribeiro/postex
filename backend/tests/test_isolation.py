@@ -133,3 +133,24 @@ async def test_business_header_of_another_account_is_rejected(
         "/api/v1/dashboard", headers={"X-Business-Id": owner["business_id"]}
     )
     assert dashboard.status_code == 404
+
+
+async def test_generate_and_questions_are_scoped_to_the_account(
+    client: AsyncClient, second_client: AsyncClient
+) -> None:
+    owner = await _account_with_content(client, email="dono5@exemplo.com")
+
+    await register_user(second_client, email="intruso5@exemplo.com")
+    await create_business(second_client, name="Negocio Isolado")
+
+    generate = await second_client.post(
+        "/api/v1/contents/generate",
+        json={"objective": "SELL", "product_id": owner["product_id"]},
+    )
+    assert generate.status_code == 404
+
+    questions = await second_client.get(
+        "/api/v1/contents/generate/questions",
+        params={"objective": "SELL", "product_id": owner["product_id"]},
+    )
+    assert questions.status_code == 404

@@ -1,252 +1,292 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2, Loader2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Building2, Package, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { z } from "zod";
 
-import { FieldError, Input, Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { TagInput } from "@/components/ui/tag-input";
+import { FieldHint, FieldError, Input, Label, Textarea } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-
-import { aiApi } from "@/lib/api/ai";
+import { assetsApi, readImageDimensions, uploadFileToSignedUrl } from "@/lib/api/assets";
 import { businessApi } from "@/lib/api/business";
+import { productsApi, servicesApi } from "@/lib/api/catalog";
 import { ApiError } from "@/lib/api/client";
-import { queryKeys } from "@/lib/query-keys";
+import type { ContentObjective } from "@/lib/api/types";
 import { useSession } from "@/lib/hooks/use-session";
+import { queryKeys } from "@/lib/query-keys";
+import { cn } from "@/lib/utils";
 
-const schema = z.object({
-  name: z.string().min(2, "Informe o nome do negocio.").max(160),
-  segment: z.string().min(2, "Informe o segmento.").max(120),
-  description: z.string().max(4000).optional().or(z.literal("")),
-  target_audience: z.string().max(2000).optional().or(z.literal("")),
-  location: z.string().max(180).optional().or(z.literal("")),
-  brand_voice: z.string().max(1000).optional().or(z.literal("")),
-  additional_info: z.string().max(4000).optional().or(z.literal("")),
-  instagram_handle: z.string().max(80).optional().or(z.literal("")),
-  website: z.string().max(255).optional().or(z.literal("")),
-  differentiators: z.array(z.string()),
-  objectives: z.array(z.string()),
-});
+const OBJECTIVES: { value: ContentObjective; label: string; description: string }[] = [
+  { value: "SELL", label: "Vender", description: "Mostrar um produto ou servico e convencer a pessoa a comprar." },
+  { value: "ATTRACT", label: "Atrair clientes", description: "Trazer gente nova para o perfil, sem pedir a compra agora." },
+  { value: "BRAND", label: "Fortalecer a marca", description: "Mostrar quem voce e e por que confiar no seu negocio." },
+];
 
-type FormValues = z.infer<typeof schema>;
+const OBJECTIVE_LABELS: Record<ContentObjective, string> = {
+  SELL: "Vender",
+  ATTRACT: "Atrair clientes",
+  BRAND: "Fortalecer a marca",
+};
 
 export default function BusinessOnboardingPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: session, isLoading: sessionLoading } = useSession();
 
-  const { data: taxonomy } = useQuery({
-    queryKey: queryKeys.taxonomy,
-    queryFn: aiApi.taxonomy,
-  });
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [segment, setSegment] = useState("");
+  const [description, setDescription] = useState("");
+  const [itemKind, setItemKind] = useState<"product" | "service">("product");
+  const [itemName, setItemName] = useState("");
+  const [itemPrice, setItemPrice] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [objective, setObjective] = useState<ContentObjective | null>(null);
+  const [nameError, setNameError] = useState<string | undefined>();
+  const [segmentError, setSegmentError] = useState<string | undefined>();
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    formState: { errors },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      name: "",
-      segment: "",
-      description: "",
-      target_audience: "",
-      location: "",
-      brand_voice: "",
-      additional_info: "",
-      instagram_handle: "",
-      website: "",
-      differentiators: [],
-      objectives: [],
-    },
-  });
+  const createBusiness = useMutation({ mutationFn: businessApi.create });
 
   useEffect(() => {
-    if (!sessionLoading && session?.has_business) {
-      router.replace("/dashboard");
+    if (!sessionLoading && session?.has_business && !busy) {
+      router.replace("/inicio");
     }
-  }, [sessionLoading, session, router]);
-
-  const create = useMutation({
-    mutationFn: businessApi.create,
-    onSuccess: (business) => {
-      queryClient.setQueryData(queryKeys.business, business);
-      queryClient.invalidateQueries({ queryKey: queryKeys.session });
-      toast.success(`Negocio "${business.name}" criado! Vamos gerar suas primeiras ideias.`);
-      router.push("/dashboard");
-    },
-    onError: (error: unknown) => {
-      toast.error(error instanceof ApiError ? error.message : "Nao foi possivel salvar o negocio.");
-    },
-  });
+  }, [busy, router, session, sessionLoading]);
 
   if (sessionLoading || !session) {
     return <PageSpinner label="Carregando..." />;
   }
 
-  function onSubmit(values: FormValues) {
-    create.mutate({
-      name: values.name,
-      segment: values.segment,
-      description: values.description || null,
-      target_audience: values.target_audience || null,
-      location: values.location || null,
-      brand_voice: values.brand_voice || null,
-      additional_info: values.additional_info || null,
-      instagram_handle: values.instagram_handle || null,
-      website: values.website || null,
-      differentiators: values.differentiators,
-      objectives: values.objectives,
-    });
+  if (session.has_business && !busy) {
+    return <PageSpinner label="Redirecionando..." />;
+  }
+
+  function goFromStep1() {
+    const nextName = name.trim();
+    const nextSegment = segment.trim();
+    setNameError(nextName.length < 2 ? "Informe o nome do negocio." : undefined);
+    setSegmentError(nextSegment.length < 2 ? "Informe o segmento." : undefined);
+    if (nextName.length < 2 || nextSegment.length < 2) return;
+    setStep(2);
+  }
+
+  async function finish() {
+    if (!objective) {
+      toast.error("Escolha um objetivo.");
+      return;
+    }
+    if (objective === "SELL" && !itemName.trim()) {
+      toast.error("Para vender, cadastre um produto ou servico.");
+      setStep(2);
+      return;
+    }
+    setBusy(true);
+    try {
+      const business = await createBusiness.mutateAsync({
+        name: name.trim(),
+        segment: segment.trim(),
+        description: description.trim() || null,
+        objectives: [OBJECTIVE_LABELS[objective]],
+        differentiators: [],
+      });
+      queryClient.setQueryData(queryKeys.business, business);
+      queryClient.invalidateQueries({ queryKey: queryKeys.session });
+
+      let productId: string | undefined;
+      let serviceId: string | undefined;
+      const trimmedItem = itemName.trim();
+      const price = itemPrice.trim() ? Number(itemPrice.replace(",", ".")) : null;
+      if (trimmedItem) {
+        if (itemKind === "product") {
+          const product = await productsApi.create({
+            name: trimmedItem,
+            price: price != null && !Number.isNaN(price) ? price : undefined,
+          });
+          productId = product.id;
+        } else {
+          const service = await servicesApi.create({
+            name: trimmedItem,
+            price: price != null && !Number.isNaN(price) ? price : undefined,
+          });
+          serviceId = service.id;
+        }
+        if (photoFile && (productId || serviceId)) {
+          const ticket = await assetsApi.createUploadUrl({
+            filename: photoFile.name,
+            mime_type: photoFile.type || "image/jpeg",
+            size_bytes: photoFile.size,
+            kind: "PRODUCT_PHOTO",
+            product_id: productId,
+            service_id: serviceId,
+          });
+          await uploadFileToSignedUrl(ticket, photoFile);
+          const dimensions = await readImageDimensions(photoFile);
+          await assetsApi.confirm(ticket.asset_id, {
+            size_bytes: photoFile.size,
+            width: dimensions?.width,
+            height: dimensions?.height,
+            analyze: false,
+          });
+        }
+      }
+
+      const params = new URLSearchParams({ objective });
+      if (productId) params.set("product", productId);
+      if (serviceId) params.set("service", serviceId);
+      router.push(`/criar?${params.toString()}`);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Nao foi possivel terminar o cadastro.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <div className="min-h-screen bg-background px-4 py-10">
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-lg">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30">
-            <Building2 className="h-6 w-6" />
+            {step === 1 ? <Building2 className="h-6 w-6" /> : step === 2 ? <Package className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
           </div>
-          <h1 className="text-2xl font-semibold text-foreground">Conte sobre o seu negocio</h1>
-          <p className="mt-2 text-sm text-foreground/55">
-            Essas informacoes alimentam o Motor de Conteudo: quanto mais contexto, mais especificas e
-            relevantes ficam as ideias e os conteudos gerados para o seu Instagram.
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground/45">
+            Passo {step} de 3
           </p>
+          <h1 className="mt-2 text-2xl font-semibold text-foreground">
+            {step === 1 && "O que sua empresa faz?"}
+            {step === 2 && "O que voce vende?"}
+            {step === 3 && "Qual seu objetivo?"}
+          </h1>
         </div>
 
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-6 rounded-2xl border border-border-subtle bg-surface p-6 shadow-sm sm:p-8"
-        >
-          <section className="space-y-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-600">
-              O essencial
-            </h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="name">Nome do negocio *</Label>
-                <Input id="name" placeholder="Ex.: Cafeteria Aroma" {...register("name")} />
-                <FieldError>{errors.name?.message}</FieldError>
-              </div>
-              <div>
-                <Label htmlFor="segment">Segmento *</Label>
-                <Input id="segment" placeholder="Ex.: Cafeteria e confeitaria" {...register("segment")} />
-                <FieldError>{errors.segment?.message}</FieldError>
-              </div>
+        {step === 1 && (
+          <div className="space-y-4 rounded-2xl border border-border-subtle bg-surface p-6">
+            <div>
+              <Label htmlFor="name">Nome do negocio *</Label>
+              <Input id="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Cafeteria Aroma" />
+              <FieldError>{nameError}</FieldError>
             </div>
             <div>
-              <Label htmlFor="description">Descricao do negocio</Label>
+              <Label htmlFor="segment">Segmento *</Label>
+              <Input id="segment" value={segment} onChange={(event) => setSegment(event.target.value)} placeholder="Ex.: Cafeteria e confeitaria" />
+              <FieldError>{segmentError}</FieldError>
+            </div>
+            <div>
+              <Label htmlFor="description">Descricao</Label>
               <Textarea
                 id="description"
                 rows={3}
-                placeholder="O que voce vende, como trabalha, o que te torna diferente..."
-                {...register("description")}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="O que voce vende, como trabalha..."
               />
             </div>
-          </section>
+            <Button size="lg" className="w-full" onClick={goFromStep1}>
+              Continuar
+            </Button>
+          </div>
+        )}
 
-          <section className="space-y-4 border-t border-border-subtle pt-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-600">
-              Publico e localizacao
-            </h2>
-            <div>
-              <Label htmlFor="target_audience">Publico-alvo</Label>
-              <Textarea
-                id="target_audience"
-                rows={2}
-                placeholder="Quem compra de voce? Idade, interesses, comportamento..."
-                {...register("target_audience")}
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="location">Localizacao</Label>
-                <Input id="location" placeholder="Cidade, bairro ou regiao" {...register("location")} />
-              </div>
-              <div>
-                <Label htmlFor="instagram_handle">Instagram (@)</Label>
-                <Input id="instagram_handle" placeholder="@seunegocio" {...register("instagram_handle")} />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="website">Site (opcional)</Label>
-              <Input id="website" placeholder="https://" {...register("website")} />
-            </div>
-          </section>
-
-          <section className="space-y-4 border-t border-border-subtle pt-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-600">
-              Voz e diferenciais
-            </h2>
-            <div>
-              <Label htmlFor="brand_voice">Tom de comunicacao</Label>
-              <Textarea
-                id="brand_voice"
-                rows={2}
-                placeholder="Ex.: Proximo e acolhedor, com humor leve, sem formalidade excessiva."
-                {...register("brand_voice")}
-              />
-            </div>
-            <div>
-              <Label>Diferenciais</Label>
-              <Controller
-                control={control}
-                name="differentiators"
-                render={({ field }) => (
-                  <TagInput value={field.value} onChange={field.onChange} placeholder="Ex.: Cafe 100% especial" />
+        {step === 2 && (
+          <div className="space-y-4 rounded-2xl border border-border-subtle bg-surface p-6">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setItemKind("product")}
+                className={cn(
+                  "flex-1 rounded-xl border px-3 py-2 text-sm font-medium",
+                  itemKind === "product" ? "border-brand-500 bg-brand-50 text-brand-800" : "border-border-subtle"
                 )}
-              />
-            </div>
-            <div>
-              <Label>Objetivos com o Instagram</Label>
-              <Controller
-                control={control}
-                name="objectives"
-                render={({ field }) => (
-                  <TagInput
-                    value={field.value}
-                    onChange={field.onChange}
-                    placeholder="Ex.: Atrair clientes locais"
-                  />
+              >
+                Produto
+              </button>
+              <button
+                type="button"
+                onClick={() => setItemKind("service")}
+                className={cn(
+                  "flex-1 rounded-xl border px-3 py-2 text-sm font-medium",
+                  itemKind === "service" ? "border-brand-500 bg-brand-50 text-brand-800" : "border-border-subtle"
                 )}
+              >
+                Servico
+              </button>
+            </div>
+            <div>
+              <Label htmlFor="item_name">Nome</Label>
+              <Input
+                id="item_name"
+                value={itemName}
+                onChange={(event) => setItemName(event.target.value)}
+                placeholder={itemKind === "product" ? "Ex.: Cafe especial 250g" : "Ex.: Consultoria inicial"}
               />
             </div>
             <div>
-              <Label htmlFor="additional_info">Informacoes adicionais</Label>
-              <Textarea
-                id="additional_info"
-                rows={2}
-                placeholder="Qualquer outro contexto util para a IA"
-                {...register("additional_info")}
+              <Label htmlFor="item_price">Preco (opcional)</Label>
+              <Input
+                id="item_price"
+                inputMode="decimal"
+                value={itemPrice}
+                onChange={(event) => setItemPrice(event.target.value)}
+                placeholder="Ex.: 42,90"
               />
             </div>
-          </section>
+            <div>
+              <Label htmlFor="item_photo">Foto (opcional)</Label>
+              <input
+                id="item_photo"
+                type="file"
+                accept="image/*"
+                onChange={(event) => setPhotoFile(event.target.files?.[0] ?? null)}
+                className="block w-full text-sm text-foreground/70"
+              />
+              <FieldHint>{photoFile ? photoFile.name : "JPG, PNG ou WebP."}</FieldHint>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" className="flex-1" onClick={() => setStep(1)}>
+                Voltar
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setStep(3)}>
+                Pular
+              </Button>
+              <Button className="flex-1" onClick={() => setStep(3)}>
+                Continuar
+              </Button>
+            </div>
+          </div>
+        )}
 
-          {taxonomy && (
-            <section className="rounded-xl bg-surface-muted p-4 text-xs text-foreground/60">
-              O Motor de Conteudo ja vem configurado com {taxonomy.categories.length} pilares editoriais
-              (educativo, prova social, bastidores e mais). Voce podera ajustar as preferencias em
-              Configuracoes apos criar o negocio.
-            </section>
-          )}
-
-          <Button type="submit" size="lg" className="w-full" loading={create.isPending}>
-            {create.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Criando negocio...
-              </>
-            ) : (
-              "Criar negocio e comecar"
-            )}
-          </Button>
-        </form>
+        {step === 3 && (
+          <div className="space-y-4 rounded-2xl border border-border-subtle bg-surface p-6">
+            <div className="grid gap-2">
+              {OBJECTIVES.map((entry) => (
+                <button
+                  key={entry.value}
+                  type="button"
+                  onClick={() => setObjective(entry.value)}
+                  className={cn(
+                    "rounded-xl border px-4 py-3 text-left",
+                    objective === entry.value
+                      ? "border-brand-500 bg-brand-50"
+                      : "border-border-subtle hover:border-brand-200"
+                  )}
+                >
+                  <p className="font-semibold text-foreground">{entry.label}</p>
+                  <p className="mt-1 text-xs text-foreground/55">{entry.description}</p>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" className="flex-1" onClick={() => setStep(2)}>
+                Voltar
+              </Button>
+              <Button className="flex-1" onClick={() => void finish()} loading={busy}>
+                Comecar a criar
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

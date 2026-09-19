@@ -47,3 +47,6 @@ def get_ai_provider(name: AIProviderName | None = None) -> AIProvider:
 def reset_provider_cache() -> None:
     """Usado em testes que alternam de provedor."""
     _PROVIDER_CACHE.clear()
+    from app.ai.image.registry import reset_image_provider_cache
+
+    reset_image_provider_cache()

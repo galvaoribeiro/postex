@@ -57,18 +57,18 @@ export function Topbar({ business }: { business?: BusinessRead | null }) {
                 <p className="text-xs text-foreground/50">{session?.user.email}</p>
               </div>
               <Link
-                href="/settings"
+                href="/settings/conta"
                 onClick={() => setMenuOpen(false)}
                 className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground/80 hover:bg-surface-muted"
               >
                 <User className="h-4 w-4" /> Meu perfil
               </Link>
               <Link
-                href="/business"
+                href="/settings"
                 onClick={() => setMenuOpen(false)}
                 className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground/80 hover:bg-surface-muted"
               >
-                <Settings className="h-4 w-4" /> Configurar negocio
+                <Settings className="h-4 w-4" /> Configuracoes
               </Link>
               <button
                 onClick={() => logout.mutate()}
@@ -91,7 +91,7 @@ export function Topbar({ business }: { business?: BusinessRead | null }) {
                 <X className="h-5 w-5 text-foreground/60" />
               </button>
             </div>
-            <nav className="flex flex-col gap-1">
+            <nav className="flex flex-1 flex-col gap-1">
               {NAV_ITEMS.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 const Icon = item.icon;
@@ -111,6 +111,19 @@ export function Topbar({ business }: { business?: BusinessRead | null }) {
                 );
               })}
             </nav>
+            <Link
+              href="/settings"
+              onClick={() => setMobileNavOpen(false)}
+              className={cn(
+                "mt-auto flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
+                pathname.startsWith("/settings")
+                  ? "bg-brand-50 text-brand-700"
+                  : "text-foreground/70 hover:bg-surface-muted"
+              )}
+            >
+              <Settings className="h-[18px] w-[18px]" />
+              Configuracoes
+            </Link>
           </div>
         </div>
       )}

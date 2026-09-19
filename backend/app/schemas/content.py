@@ -6,11 +6,12 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.models.enums import (
     ContentAssetRole,
     ContentFormat,
+    ContentObjective,
     ContentStatus,
     IdeaStatus,
     RegenerationScope,
@@ -60,6 +61,41 @@ class IdeaStatusUpdate(APIRequest):
 
 
 # --------------------------------------------------------------- conteudos ---
+
+
+class ContentGenerateRequest(APIRequest):
+    """Pedido de criacao em um passo: produto/objetivo -> job unico -> preview."""
+
+    product_id: uuid.UUID | None = None
+    service_id: uuid.UUID | None = None
+    objective: ContentObjective
+    format: ContentFormat | None = Field(
+        default=None, description="None deixa o motor escolher; a UI do MVP nao oferece seletor."
+    )
+    answers: dict[str, str] = Field(default_factory=dict)
+    planned_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_item_for_objective(self) -> ContentGenerateRequest:
+        if self.product_id and self.service_id:
+            raise ValueError("Informe produto ou servico, nao os dois.")
+        if self.objective is ContentObjective.SELL and not self.product_id and not self.service_id:
+            raise ValueError("Para vender, escolha um produto ou servico.")
+        return self
+
+
+class QuestionOption(APIModel):
+    value: str
+    label: str
+
+
+class CreationQuestion(APIModel):
+    key: str
+    question: str
+    kind: str
+    options: list[QuestionOption] = Field(default_factory=list)
+    optional: bool = True
+    persist_to: str | None = None
 
 
 class ContentFromIdeaRequest(APIRequest):
@@ -163,6 +199,7 @@ class ContentRead(APIModel):
     current_version: int
     created_at: datetime
     updated_at: datetime
+    presenter_name: str | None = None
     assets: list[ContentAssetRead] = Field(default_factory=list)
     allowed_transitions: list[ContentStatus] = Field(default_factory=list)
 

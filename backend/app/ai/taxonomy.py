@@ -10,7 +10,15 @@ from pathlib import Path
 import yaml
 
 from app.core.exceptions import ValidationError
-from app.models.enums import ContentFormat
+from app.models.enums import ContentFormat, ContentObjective
+
+#: Unico mapa objetivo de produto -> pilares da taxonomia. A UI nunca mostra
+#: essas chaves; o job de criacao em um passo sorteia um pilar da lista.
+OBJECTIVE_PILLARS: dict[ContentObjective, tuple[str, ...]] = {
+    ContentObjective.SELL: ("produto", "oferta", "demonstracao", "objecoes", "comparacao"),
+    ContentObjective.ATTRACT: ("educativo", "prova_social", "relacionamento", "tendencias"),
+    ContentObjective.BRAND: ("autoridade", "bastidores", "entretenimento", "relacionamento"),
+}
 
 TAXONOMY_PATH = Path(__file__).parent / "config" / "content_taxonomy.yaml"
 
@@ -130,3 +138,28 @@ def _load(path: Path = TAXONOMY_PATH) -> ContentTaxonomy:
 @lru_cache
 def get_taxonomy() -> ContentTaxonomy:
     return _load()
+
+
+def pillars_for_objective(
+    objective: ContentObjective, *, service_focused: bool = False
+) -> tuple[str, ...]:
+    """Pilares editoriais que realizam o objetivo do usuario.
+
+    Quando o foco e um servico, o pilar `produto` cede lugar a `servico` para
+    o motor nao tentar vender um item de catalogo que nao e o foco.
+    """
+    pillars = OBJECTIVE_PILLARS[objective]
+    if service_focused and objective is ContentObjective.SELL:
+        return tuple("servico" if key == "produto" else key for key in pillars)
+    return pillars
+
+
+def pick_pillar_for_objective(
+    objective: ContentObjective,
+    *,
+    seed: int | None = None,
+    service_focused: bool = False,
+) -> str:
+    pillars = pillars_for_objective(objective, service_focused=service_focused)
+    rng = random.Random(seed)
+    return rng.choice(list(pillars))

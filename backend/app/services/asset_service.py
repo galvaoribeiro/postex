@@ -155,6 +155,49 @@ class AssetService:
         # apontando para um arquivo que nao existe mais.
         await self.storage.delete_object(storage_key)
 
+    async def create_generated(
+        self,
+        business_id: uuid.UUID,
+        *,
+        data: bytes,
+        mime_type: str,
+        filename: str,
+        kind: AssetKind = AssetKind.AI_GENERATED,
+        title: str | None = None,
+        alt_text: str | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        product_id: uuid.UUID | None = None,
+        service_id: uuid.UUID | None = None,
+        tags: list[str] | None = None,
+    ) -> Asset:
+        """Persiste um still gerado no backend: sobe o binario e marca READY."""
+        mime = self.storage.validate_upload(
+            filename=filename, mime_type=mime_type, size_bytes=len(data)
+        )
+        await self._validate_links(business_id, product_id, service_id)
+        storage_key = self.storage.build_key(business_id, filename)
+        await self.storage.put_object(storage_key, data, mime_type=mime)
+        asset = await self.assets.add(
+            Asset(
+                business_id=business_id,
+                product_id=product_id,
+                service_id=service_id,
+                kind=kind,
+                status=AssetStatus.READY,
+                storage_key=storage_key,
+                original_filename=filename[:255],
+                mime_type=mime,
+                size_bytes=len(data),
+                width=width,
+                height=height,
+                title=title,
+                alt_text=alt_text,
+                tags=tags or [],
+            )
+        )
+        return asset
+
     # ------------------------------------------------------------- validacao
     async def _validate_links(
         self,

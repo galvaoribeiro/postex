@@ -26,7 +26,7 @@ export function useLogin() {
     onSuccess: (session) => {
       queryClient.setQueryData(queryKeys.session, session);
       toast.success(`Bem-vindo(a) de volta, ${session.user.full_name.split(" ")[0]}!`);
-      router.push(session.has_business ? "/dashboard" : "/business/new");
+      router.push(session.has_business ? "/inicio" : "/business/new");
     },
     onError: (error: unknown) => {
       const message = error instanceof ApiError ? error.message : "Nao foi possivel entrar.";

@@ -25,7 +25,7 @@ import boto3
 from botocore.client import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-from app.core.config import Settings, settings as default_settings
+from app.core.config import Environment, Settings, settings as default_settings
 from app.core.exceptions import StorageError, ValidationError
 from app.core.logging import get_logger
 
@@ -62,6 +62,9 @@ class StorageService:
             if self.settings.S3_PUBLIC_ENDPOINT_URL == self.settings.S3_ENDPOINT_URL
             else self._build_client(self.settings.S3_PUBLIC_ENDPOINT_URL)
         )
+        #: Nos testes o still gerado nao depende do MinIO.
+        self._memory: dict[str, bytes] = {}
+        self._use_memory = self.settings.ENVIRONMENT is Environment.TEST
 
     # ------------------------------------------------------------- clientes
     def _build_client(self, endpoint_url: str) -> Any:
@@ -184,6 +187,27 @@ class StorageService:
             expires_in=expires,
         )
 
+    async def put_object(
+        self, storage_key: str, body: bytes, *, mime_type: str
+    ) -> None:
+        """Grava bytes gerados no backend (stills de IA)."""
+        if self._use_memory:
+            self._memory[storage_key] = body
+            return
+
+        def _put() -> None:
+            self._internal.put_object(
+                Bucket=self.bucket,
+                Key=storage_key,
+                Body=body,
+                ContentType=mime_type,
+            )
+
+        try:
+            await asyncio.to_thread(_put)
+        except (BotoCoreError, ClientError) as exc:
+            raise StorageError("Nao foi possivel gravar a imagem gerada.") from exc
+
     def create_presigned_download(
         self, storage_key: str, *, expires_in: int | None = None, internal: bool = False
     ) -> str:
@@ -193,6 +217,8 @@ class StorageService:
         consumidor e o proprio backend (por exemplo o provedor de IA rodando
         dentro da mesma rede).
         """
+        if self._use_memory:
+            return f"http://testserver/generated/{storage_key}"
         client = self._internal if internal else self._public
         try:
             return client.generate_presigned_url(
@@ -205,6 +231,12 @@ class StorageService:
 
     # --------------------------------------------------------------- objeto
     async def head_object(self, storage_key: str) -> dict[str, Any] | None:
+        if self._use_memory:
+            data = self._memory.get(storage_key)
+            if data is None:
+                return None
+            return {"ContentLength": len(data)}
+
         def _head() -> dict[str, Any] | None:
             try:
                 return self._internal.head_object(Bucket=self.bucket, Key=storage_key)
@@ -219,6 +251,10 @@ class StorageService:
             raise StorageError("Falha ao consultar o arquivo no storage.") from exc
 
     async def delete_object(self, storage_key: str) -> None:
+        if self._use_memory:
+            self._memory.pop(storage_key, None)
+            return
+
         def _delete() -> None:
             self._internal.delete_object(Bucket=self.bucket, Key=storage_key)
 

@@ -18,11 +18,13 @@ from app.models.enums import AssetStatus, JobKind, RegenerationScope
 from app.models.job import Job
 from app.schemas.content import (
     ContentFromIdeaRequest,
+    ContentGenerateRequest,
     ContentRegenerateRequest,
     IdeaGenerateRequest,
 )
 from app.services.asset_service import AssetService
 from app.services.content_service import ContentService
+from app.services.creation_questions import persist_creation_answers, resolve_creation_item
 from app.services.idea_service import IdeaService
 from app.services.job_service import JobService
 
@@ -58,6 +60,38 @@ class AIService:
                 "categories": data.categories,
                 "format_hint": data.format_hint.value if data.format_hint else None,
                 "instruction": data.instruction,
+            },
+        )
+
+    async def request_content_creation(self, data: ContentGenerateRequest) -> Job:
+        product, service = await resolve_creation_item(
+            self.session,
+            self.business.id,
+            objective=data.objective,
+            product_id=data.product_id,
+            service_id=data.service_id,
+        )
+        instruction = await persist_creation_answers(
+            self.session,
+            self.business,
+            product=product,
+            service=service,
+            objective=data.objective,
+            answers=data.answers,
+        )
+
+        return await self.jobs.create(
+            business_id=self.business.id,
+            user_id=self.user_id,
+            kind=JobKind.CONTENT_CREATION,
+            provider=self.provider_name,
+            payload={
+                "objective": data.objective.value,
+                "product_id": str(product.id) if product else None,
+                "service_id": str(service.id) if service else None,
+                "format": data.format.value if data.format else None,
+                "instruction": instruction,
+                "planned_date": data.planned_date.isoformat() if data.planned_date else None,
             },
         )
 

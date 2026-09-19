@@ -91,6 +91,22 @@ class JobService:
         await self.session.flush()
         return job
 
+    @classmethod
+    async def set_stage(cls, job_id: uuid.UUID, stage: str, progress: int) -> None:
+        """Persiste o stage com transacao curta, fora do handler longo de geracao.
+
+        Sem um commit proprio o polling da interface so veria `ideia`/`roteiro`
+        depois que o job inteiro terminasse.
+        """
+        from app.core.database import session_scope
+
+        async with session_scope() as session:
+            service = cls(session)
+            job = await service.get_unscoped(job_id)
+            job.stage = stage
+            job.progress = max(0, min(99, progress))
+            await session.flush()
+
     async def complete(self, job: Job, result: dict[str, Any]) -> Job:
         job.status = JobStatus.COMPLETED
         job.progress = 100

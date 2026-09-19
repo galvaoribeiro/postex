@@ -223,6 +223,10 @@ class _MockGenerator:
 
     def subjects(self) -> list[str]:
         items = list(self.hints.product_names) + list(self.hints.service_names)
+        if self.hints.focus_name:
+            focused = self.hints.focus_name
+            rest = [name for name in items if name != focused]
+            items = [focused, *rest]
         if not items:
             items = [self.hints.segment or "o servico principal"]
         return items

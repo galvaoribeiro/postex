@@ -413,12 +413,15 @@ async def test_dashboard_next_action_follows_priority(user_with_business: ApiUse
     await _seed_catalog(client)
 
     empty = (await client.get("/api/v1/dashboard")).json()
-    assert empty["next_action"]["kind"] == "generate_ideas"
+    assert empty["next_action"]["kind"] == "create"
+    assert empty["next_action"]["href"] == "/criar"
     assert empty["counters"]["total"] == 0
+    assert {item["kind"] for item in empty["quick_create"]} == {"product", "service"}
 
     await _generate_ideas(client, count=3)
     with_ideas = (await client.get("/api/v1/dashboard")).json()
-    assert with_ideas["next_action"]["kind"] == "pick_idea"
+    # Ideias nao mudam o destino: Inicio so dispara criar ou abre preview.
+    assert with_ideas["next_action"]["kind"] == "create"
     assert with_ideas["counters"]["ideas_available"] == 3
 
     ideas = (await client.get("/api/v1/content-ideas")).json()
@@ -426,15 +429,27 @@ async def test_dashboard_next_action_follows_priority(user_with_business: ApiUse
     with_draft = (await client.get("/api/v1/dashboard")).json()
     assert with_draft["next_action"]["kind"] == "review"
     assert with_draft["next_action"]["content_id"] == content["id"]
+    assert with_draft["next_action"]["cta_label"] == "Abrir preview"
 
     await client.post(f"/api/v1/contents/{content['id']}/approve")
     await client.post(
         f"/api/v1/contents/{content['id']}/schedule",
         json={"planned_date": date.today().isoformat()},
     )
-    today_ready = (await client.get("/api/v1/dashboard")).json()
-    assert today_ready["next_action"]["kind"] == "publish_today"
-    assert len(today_ready["today"]) == 1
+    after_schedule = (await client.get("/api/v1/dashboard")).json()
+    assert after_schedule["next_action"]["kind"] == "create"
+    assert len(after_schedule["today"]) == 1
+
+
+async def test_dashboard_does_not_gate_on_completeness(client: AsyncClient) -> None:
+    from tests.conftest import register_user
+
+    await register_user(client)
+    await client.post("/api/v1/business", json={"name": "Loja X", "segment": "moda"})
+    dashboard = (await client.get("/api/v1/dashboard")).json()
+    assert dashboard["business_completeness"] < 60
+    assert dashboard["next_action"]["kind"] == "create"
+    assert dashboard["quick_create"] == []
 
 
 async def test_calendar_groups_contents_by_planned_date(user_with_business: ApiUser) -> None:

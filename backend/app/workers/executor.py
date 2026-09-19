@@ -17,6 +17,7 @@ from typing import Any
 from app.ai.content_engine import ContentEngine
 from app.ai.context_builder import ContextBuilder
 from app.ai.registry import get_ai_provider
+from app.ai.taxonomy import pick_pillar_for_objective
 from app.ai.types import ImageRef
 from app.core.database import session_scope
 from app.core.exceptions import DomainError, NotFoundError
@@ -25,6 +26,7 @@ from app.models.business import Business
 from app.models.enums import (
     TERMINAL_JOB_STATUSES,
     ContentFormat,
+    ContentObjective,
     JobKind,
     RegenerationScope,
 )
@@ -33,6 +35,7 @@ from app.services.asset_service import AssetService
 from app.services.content_service import ContentService
 from app.services.idea_service import IdeaService
 from app.services.job_service import JobService
+from app.services.still_service import StillService
 from app.services.storage_service import get_storage_service
 
 logger = get_logger(__name__)
@@ -113,6 +116,7 @@ async def _run_handler(
         JobKind.CONTENT_PRODUCTION: _handle_production,
         JobKind.CONTENT_REGENERATION: _handle_regeneration,
         JobKind.ASSET_ANALYSIS: _handle_asset_analysis,
+        JobKind.CONTENT_CREATION: _handle_content_creation,
     }
     handler = handlers[kind]
 
@@ -245,4 +249,86 @@ async def _handle_asset_analysis(
         "asset_id": str(asset.id),
         "summary": result.analysis.get("summary"),
         "provider": result.provider_metadata,
+    }
+
+
+async def _handle_content_creation(
+    session: Any, business: Business, job_id: uuid.UUID, payload: dict[str, Any]
+) -> dict[str, Any]:
+    objective = ContentObjective(payload["objective"])
+    product_id = uuid.UUID(payload["product_id"]) if payload.get("product_id") else None
+    service_id = uuid.UUID(payload["service_id"]) if payload.get("service_id") else None
+    format_hint = ContentFormat(payload["format"]) if payload.get("format") else None
+    instruction = payload.get("instruction")
+    planned_date = payload.get("planned_date")
+
+    provider = get_ai_provider()
+    context = await ContextBuilder(session).build(
+        business,
+        include_image_urls=provider.supports_vision,
+        focus_product_id=product_id,
+        focus_service_id=service_id,
+    )
+    engine = ContentEngine(provider)
+    pillar = pick_pillar_for_objective(
+        objective,
+        seed=int(job_id.int % 1_000_000),
+        service_focused=service_id is not None,
+    )
+    stages: list[str] = []
+
+    async def mark(stage: str, progress: int) -> None:
+        stages.append(stage)
+        await JobService.set_stage(job_id, stage, progress)
+
+    await mark("ideia", 25)
+    ideation = await engine.generate_ideas(
+        context,
+        count=1,
+        categories=[pillar],
+        format_hint=format_hint,
+        extra_instruction=instruction,
+        seed=int(job_id.int % 1_000_000),
+    )
+    idea_service = IdeaService(session)
+    idea = (await idea_service.persist_batch(business.id, ideation, job_id=job_id))[0]
+
+    content_format = format_hint or idea.suggested_format
+    await mark("roteiro", 60)
+    production = await engine.produce(
+        context,
+        IdeaService.to_engine_input(idea),
+        content_format=content_format,
+        instruction=instruction,
+        seed=int(job_id.int % 1_000_000),
+    )
+
+    await mark("imagem", 78)
+    content = await ContentService(session).create_from_production(
+        business_id=business.id,
+        result=production,
+        idea_id=idea.id,
+        planned_date=date.fromisoformat(planned_date) if planned_date else None,
+    )
+    _asset, still_meta = await StillService(session).attach_cover(
+        business=business,
+        content=content,
+        context=context,
+        production=production,
+        seed=int(job_id.int % 1_000_000),
+        product_id=product_id,
+        service_id=service_id,
+    )
+    await mark("finalizando", 92)
+    await idea_service.mark_used(idea)
+
+    return {
+        "content_id": str(content.id),
+        "idea_id": str(idea.id),
+        "format": content.format.value,
+        "title": content.title,
+        "stages": stages,
+        "presenter": still_meta.get("presenter"),
+        "image": still_meta.get("image"),
+        "provider": production.provider_metadata,
     }

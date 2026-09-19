@@ -15,4 +15,6 @@ export const queryKeys = {
   taxonomy: ["taxonomy"] as const,
   formats: ["formats"] as const,
   capabilities: ["capabilities"] as const,
+  creationQuestions: (filters?: Record<string, unknown>) =>
+    ["creation-questions", filters] as const,
 };

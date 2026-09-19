@@ -1,0 +1,82 @@
+# Catalogo interno de apresentadoras ficticias adultas.
+# Nao e uma tela do produto: a escolha no MVP e automatica.
+# Toda personagem e explicitamente adulta e inventada — nunca uma pessoa real.
+
+version: 1
+
+presenters:
+  - id: lara
+    display_name: Lara
+    age_range: "28-34"
+    gender: feminine
+    adult_confirmed: true
+    style: fashion
+    personality: >
+      Confiante, espontanea e sofisticada, sem linguagem formal demais.
+      Fala como uma consultora de moda que tambem e amiga.
+    clothing_style: >
+      Moda contemporanea brasileira, pecas bem cortadas, vestidos e conjuntos
+      de loja, salto baixo ou bota, acessorios discretos.
+    appearance: >
+      Mulher adulta ficticia, cerca de 30 anos, pele morena clara, cabelo
+      castanho longo com movimento, tracos definidos, postura ereta e sorriso
+      facil. Nao se parece com celebridade conhecida.
+    visual_prompt: >
+      Adult fictional Brazilian woman, about 30 years old, long wavy brown hair,
+      warm medium skin, confident fashion-influencer posture, contemporary
+      boutique clothing, commercial lifestyle photography, natural makeup,
+      fully clothed.
+    negative_prompt: >
+      child, teen, underage, nude, sexual, celebrity lookalike, extra limbs,
+      deformed face, text overlay, watermark, logo invented on product
+    accent: "#7c3aed"
+
+  - id: camila
+    display_name: Camila
+    age_range: "32-38"
+    gender: feminine
+    adult_confirmed: true
+    style: luxury
+    personality: >
+      Calma, precisa e elegante. Transmite cuidado e criterio, como quem
+      entende de produto sem parecer distante.
+    clothing_style: >
+      Estetica luxury discreta, tons neutros, tecido fluido, joia minima,
+      visual de studio de beleza ou boutique.
+    appearance: >
+      Mulher adulta ficticia, cerca de 35 anos, pele clara a media, cabelo
+      preto liso na altura dos ombros, tracos suaves, olhar direto a camera.
+      Nao se parece com celebridade conhecida.
+    visual_prompt: >
+      Adult fictional woman, about 35 years old, shoulder-length straight black
+      hair, elegant commercial portrait, luxury beauty/fashion lighting, neutral
+      tailored outfit, fully clothed, calm confident expression.
+    negative_prompt: >
+      child, teen, underage, nude, sexual, celebrity lookalike, extra limbs,
+      deformed face, text overlay, watermark
+    accent: "#0f766e"
+
+  - id: bianca
+    display_name: Bianca
+    age_range: "26-32"
+    gender: feminine
+    adult_confirmed: true
+    style: ugc
+    personality: >
+      Proxima, energetica e direta. Parece uma cliente satisfeita gravando
+      no celular, sem pose de studio.
+    clothing_style: >
+      Casual contemporaneo, jeans ou conjunto confortavel, blusa simples,
+      estetica UGC de Instagram.
+    appearance: >
+      Mulher adulta ficticia, cerca de 28 anos, pele morena, cabelo cacheado
+      na altura dos ombros, sorriso aberto, energia de video feito em casa
+      ou na loja. Nao se parece com celebridade conhecida.
+    visual_prompt: >
+      Adult fictional woman, about 28 years old, shoulder-length curly hair,
+      warm brown skin, candid UGC smartphone photo style, casual contemporary
+      clothes, natural daylight, fully clothed, friendly smile.
+    negative_prompt: >
+      child, teen, underage, nude, sexual, celebrity lookalike, extra limbs,
+      deformed face, text overlay, watermark, studio glamour
+    accent: "#c2410c"

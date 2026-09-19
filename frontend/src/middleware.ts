@@ -29,7 +29,7 @@ export function middleware(request: NextRequest) {
 
   if (hasSession && isPublicPath) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/inicio";
     url.search = "";
     return NextResponse.redirect(url);
   }

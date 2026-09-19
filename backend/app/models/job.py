@@ -43,6 +43,8 @@ class Job(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         enum_column(JobStatus), default=JobStatus.PENDING, index=True, nullable=False
     )
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    #: Etapa visivel do job unico de criacao (`ideia` / `roteiro` / `finalizando`).
+    stage: Mapped[str | None] = mapped_column(String(32))
 
     payload: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONType)

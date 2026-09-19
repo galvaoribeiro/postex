@@ -46,6 +46,7 @@ class PromptHints:
     instruction: str | None = None
     image_labels: tuple[str, ...] = ()
     seed: int = 0
+    focus_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

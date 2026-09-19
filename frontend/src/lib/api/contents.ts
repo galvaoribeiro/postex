@@ -3,16 +3,40 @@ import type {
   ContentActionResponse,
   ContentAssetRole,
   ContentFormat,
+  ContentObjective,
   ContentRead,
   ContentStatus,
   ContentSummary,
   ContentVersionRead,
+  CreationQuestion,
   JobAccepted,
   Page,
   RegenerationScope,
 } from "./types";
 
 export const contentsApi = {
+  generate: (payload: {
+    product_id?: string | null;
+    service_id?: string | null;
+    objective: ContentObjective;
+    format?: ContentFormat | null;
+    answers?: Record<string, string>;
+    planned_date?: string | null;
+  }) => api.post<JobAccepted>("/contents/generate", payload),
+
+  generateQuestions: (params: {
+    objective: ContentObjective;
+    product_id?: string | null;
+    service_id?: string | null;
+  }) =>
+    api.get<CreationQuestion[]>("/contents/generate/questions", {
+      query: {
+        objective: params.objective,
+        product_id: params.product_id,
+        service_id: params.service_id,
+      },
+    }),
+
   createFromIdea: (payload: {
     idea_id: string;
     format?: ContentFormat | null;

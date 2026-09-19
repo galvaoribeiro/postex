@@ -9,7 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Query, status
 
 from app.core.deps import CurrentBusiness, CurrentUser, DbSession
 from app.models.content import Content
-from app.models.enums import ContentFormat, ContentStatus, RegenerationScope
+from app.models.enums import ContentFormat, ContentObjective, ContentStatus, RegenerationScope
 from app.schemas.asset import AssetRead
 from app.schemas.common import MessageResponse, Page
 from app.schemas.content import (
@@ -19,6 +19,7 @@ from app.schemas.content import (
     ContentChangeFormatRequest,
     ContentDuplicateRequest,
     ContentFromIdeaRequest,
+    ContentGenerateRequest,
     ContentManualCreate,
     ContentRead,
     ContentRegenerateRequest,
@@ -27,11 +28,13 @@ from app.schemas.content import (
     ContentSummary,
     ContentUpdate,
     ContentVersionRead,
+    CreationQuestion,
 )
 from app.schemas.job import JobAccepted
 from app.services.ai_service import AIService
 from app.services.asset_service import AssetService
 from app.services.content_service import ContentService
+from app.services.creation_questions import list_creation_questions, resolve_creation_item
 from app.workers.dispatcher import schedule_ai_job
 
 router = APIRouter(prefix="/contents", tags=["contents"])
@@ -50,9 +53,11 @@ def _to_read(content: Content, assets: AssetService) -> ContentRead:
         for link in content.asset_links
         if link.asset is not None
     ]
+    presenter = (content.generation_context or {}).get("presenter") or {}
     return data.model_copy(
         update={
             "assets": linked,
+            "presenter_name": presenter.get("display_name"),
             "allowed_transitions": ContentService.allowed_transitions(content),
         }
     )
@@ -75,6 +80,50 @@ async def create_from_idea(
     background: BackgroundTasks,
 ) -> JobAccepted:
     job = await AIService(session, business=business, user_id=user.id).request_production(payload)
+    schedule_ai_job(job.id, background)
+    return JobAccepted(job_id=job.id, status=job.status, kind=job.kind)
+
+
+@router.get(
+    "/generate/questions",
+    response_model=list[CreationQuestion],
+    summary="Perguntas que faltam antes de gerar (no maximo 3)",
+)
+async def list_generate_questions(
+    business: CurrentBusiness,
+    session: DbSession,
+    objective: ContentObjective = Query(...),
+    product_id: uuid.UUID | None = Query(default=None),
+    service_id: uuid.UUID | None = Query(default=None),
+) -> list[CreationQuestion]:
+    product, service = await resolve_creation_item(
+        session,
+        business.id,
+        objective=objective,
+        product_id=product_id,
+        service_id=service_id,
+    )
+    return await list_creation_questions(
+        session, business, objective=objective, product=product, service=service
+    )
+
+
+@router.post(
+    "/generate",
+    response_model=JobAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Cria conteudo em um passo (ideia + producao no mesmo job)",
+)
+async def generate_content(
+    payload: ContentGenerateRequest,
+    business: CurrentBusiness,
+    user: CurrentUser,
+    session: DbSession,
+    background: BackgroundTasks,
+) -> JobAccepted:
+    job = await AIService(session, business=business, user_id=user.id).request_content_creation(
+        payload
+    )
     schedule_ai_job(job.id, background)
     return JobAccepted(job_id=job.id, status=job.status, kind=job.kind)
 

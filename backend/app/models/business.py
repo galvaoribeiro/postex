@@ -33,6 +33,8 @@ def default_content_preferences() -> dict[str, Any]:
         "emoji_usage": "moderado",
         "forbidden_topics": [],
         "extra_guidelines": "",
+        "default_cta": "",
+        "whatsapp": "",
     }
 
 

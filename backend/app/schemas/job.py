@@ -15,6 +15,7 @@ class JobRead(APIModel):
     kind: JobKind
     status: JobStatus
     progress: int
+    stage: str | None = None
     provider: str | None
     result: dict[str, Any] | None
     error_message: str | None

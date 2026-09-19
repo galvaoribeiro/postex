@@ -1,32 +1,16 @@
 "use client";
 
-import {
-  Boxes,
-  CalendarDays,
-  Image as ImageIcon,
-  LayoutDashboard,
-  Lightbulb,
-  Notebook,
-  Settings,
-  Sparkles,
-  Store,
-  Wrench,
-} from "lucide-react";
+import { CalendarDays, Home, Notebook, Settings, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
 export const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/business", label: "Meu Negocio", icon: Store },
-  { href: "/products", label: "Produtos", icon: Boxes },
-  { href: "/services", label: "Servicos", icon: Wrench },
-  { href: "/assets", label: "Biblioteca de Imagens", icon: ImageIcon },
-  { href: "/ideas", label: "Ideias", icon: Lightbulb },
+  { href: "/inicio", label: "Inicio", icon: Home },
+  { href: "/criar", label: "Criar", icon: Sparkles },
   { href: "/contents", label: "Conteudos", icon: Notebook },
   { href: "/calendar", label: "Calendario", icon: CalendarDays },
-  { href: "/settings", label: "Configuracoes", icon: Settings },
 ];
 
 export function Sidebar() {
@@ -66,8 +50,19 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-border-subtle px-6 py-4 text-xs text-foreground/40">
-        Motor de Conteudo &copy; {new Date().getFullYear()}
+      <div className="border-t border-border-subtle p-3">
+        <Link
+          href="/settings"
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+            pathname.startsWith("/settings")
+              ? "bg-brand-50 text-brand-700"
+              : "text-foreground/60 hover:bg-surface-muted hover:text-foreground"
+          )}
+        >
+          <Settings className="h-[18px] w-[18px]" />
+          Configuracoes
+        </Link>
       </div>
     </aside>
   );

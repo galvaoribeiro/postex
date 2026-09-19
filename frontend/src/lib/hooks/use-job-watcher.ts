@@ -10,6 +10,7 @@ const KIND_LABELS: Record<string, string> = {
   IDEATION: "Geracao de ideias",
   CONTENT_PRODUCTION: "Producao de conteudo",
   CONTENT_REGENERATION: "Regeneracao de conteudo",
+  CONTENT_CREATION: "Criacao de conteudo",
   ASSET_ANALYSIS: "Analise de imagem",
 };
 
@@ -18,6 +19,12 @@ interface WatchOptions {
   successMessage?: string | ((job: JobRead) => string);
   onSuccess?: (job: JobRead) => void | Promise<void>;
   onError?: (message: string) => void;
+  onStage?: (stage: string | null, job: JobRead) => void;
+  onUpdate?: (job: JobRead) => void;
+  /** Quando false, o toast de loading deixa de ser a UX principal (ex.: /criar). */
+  showToast?: boolean;
+  intervalMs?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -31,26 +38,46 @@ export function useJobWatcher() {
   const watch = useCallback(async (jobId: string, kind: string, options?: WatchOptions) => {
     setIsWatching(true);
     const label = KIND_LABELS[kind] ?? "Processamento";
-    const toastId = toast.loading(options?.loadingMessage ?? `${label} em andamento...`);
+    const showToast = options?.showToast !== false;
+    const toastId = showToast
+      ? toast.loading(options?.loadingMessage ?? `${label} em andamento...`)
+      : undefined;
 
     try {
-      const job = await waitForJob(jobId);
+      const job = await waitForJob(jobId, {
+        intervalMs: options?.intervalMs,
+        signal: options?.signal,
+        onStage: options?.onStage,
+        onUpdate: options?.onUpdate,
+      });
       if (job.status === "COMPLETED") {
         const message =
           typeof options?.successMessage === "function"
             ? options.successMessage(job)
             : options?.successMessage ?? `${label} concluida.`;
-        toast.success(message, { id: toastId });
+        if (showToast && toastId !== undefined) {
+          toast.success(message, { id: toastId });
+        }
         await options?.onSuccess?.(job);
       } else {
         const message = job.error_message ?? `${label} falhou.`;
-        toast.error(message, { id: toastId });
+        if (showToast && toastId !== undefined) {
+          toast.error(message, { id: toastId });
+        } else {
+          toast.error(message);
+        }
         options?.onError?.(message);
       }
       return job;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha inesperada.";
-      toast.error(message, { id: toastId });
+      if (showToast && toastId !== undefined) {
+        toast.error(message, { id: toastId });
+      } else if (error instanceof DOMException && error.name === "AbortError") {
+        // cancelamento silencioso
+      } else {
+        toast.error(message);
+      }
       options?.onError?.(message);
       return null;
     } finally {

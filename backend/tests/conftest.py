@@ -13,8 +13,9 @@ import uuid
 from collections.abc import AsyncIterator
 
 os.environ.setdefault("ENVIRONMENT", "test")
-os.environ.setdefault("AI_PROVIDER", "mock")
-os.environ.setdefault("AI_EXECUTION_MODE", "inline")
+os.environ["AI_PROVIDER"] = "mock"
+os.environ["IMAGE_PROVIDER"] = "mock"
+os.environ["AI_EXECUTION_MODE"] = "inline"
 os.environ.setdefault("SECRET_KEY", "chave-de-teste-com-mais-de-32-caracteres-aqui")
 
 _DEFAULT_TEST_DB = "postgresql+asyncpg://postex:postex@localhost:5433/postex_test"

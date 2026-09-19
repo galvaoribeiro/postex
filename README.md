@@ -2,17 +2,23 @@
 
 SaaS de estrategia de conteudo com IA para pequenos negocios e autonomos manterem
 presenca consistente no Instagram. O produto nao gera posts genericos: ele entende
-o negocio (segmento, publico, diferenciais, produtos e servicos) e a partir desse
-contexto propoe **ideias de conteudo** e, a partir das ideias escolhidas, produz o
-**conteudo pronto para revisao** (roteiro, legenda, CTA, hashtags, cenas por
-formato).
+o negocio (segmento, publico, diferenciais, produtos e servicos) e, a partir desse
+contexto, cria o **conteudo pronto para revisao** (roteiro, legenda, CTA, hashtags,
+cenas por formato) em um unico job, e um **still de capa** com apresentadora
+automatica (mock local ou OpenAI).
 
 Fluxo do produto:
 
 ```
-Usuario -> Negocio -> Produtos/Servicos -> Contexto -> Motor de Conteudo
-        -> Ideias -> Conteudo -> Revisao -> Aprovacao -> Calendario/Publicacao
+Usuario -> Onboarding (negocio + item + objetivo)
+        -> Inicio (atalho)
+        -> Criar (perguntas -> job unico -> preview)
+        -> Aprovar / Agendar -> Calendario
 ```
+
+A geracao de ideias continua existindo no backend, como etapa interna do job
+`CONTENT_CREATION`. A tela de Ideias ficou em Configuracoes, sem ser o caminho
+diario. Detalhes em [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Stack
 
@@ -23,7 +29,7 @@ Usuario -> Negocio -> Produtos/Servicos -> Contexto -> Motor de Conteudo
 | Banco      | PostgreSQL 16 |
 | Fila/Async | Redis 7 + Celery (jobs de IA em background) |
 | Storage    | MinIO (S3-compatible) com URLs assinadas, S3 real em producao |
-| IA         | Camada `AIProvider` desacoplada: `mock` (deterministico, sem custo) e `openai` |
+| IA         | Texto (`AIProvider`) e still (`ImageProvider`): `mock` ou `openai`, independentes |
 
 ## Estrutura do repositorio
 
@@ -44,7 +50,7 @@ POSTEX/
 │   └── Dockerfile
 ├── frontend/          # Next.js App Router
 │   └── src/
-│       ├── app/       # rotas (dashboard, business, products, contents, ...)
+│       ├── app/       # rotas (inicio, criar, contents, calendar, settings, ...)
 │       ├── components/
 │       └── lib/       # api client, hooks, query-keys, utils
 ├── docker-compose.yml # Postgres + Redis + MinIO + api + worker (uso local)
@@ -130,6 +136,9 @@ Veja `.env.example` para a lista completa e comentada. Pontos importantes:
 - `AI_PROVIDER=mock` permite usar o produto ponta a ponta **sem nenhuma chave de
   API**, com um provider determinístico derivado dos dados reais do negocio.
   Troque para `openai` e preencha `OPENAI_API_KEY` para usar IA real.
+- `IMAGE_PROVIDER` segue `AI_PROVIDER` se vazio. Use `mock` para stills locais
+  mesmo com texto real (sem gastar credito de imagem). Still real: `openai` +
+  `OPENAI_IMAGE_MODEL` (padrao `dall-e-3`).
 - `AI_EXECUTION_MODE`: `celery` (producao, exige worker) ou `inline` (executa no
   processo da API, util para dev/testes sem worker).
 - Nenhuma chave de IA e exposta ao frontend; todas as chamadas de IA passam pelo
@@ -160,8 +169,10 @@ dominio publico do frontend.
 
 ## Estado atual
 
-Fluxo funcional de ponta a ponta: registro -> login -> criar negocio -> produtos
-e servicos -> assets -> gerar ideias (IA) -> escolher ideia -> gerar conteudo
-(IA) -> editar -> aprovar -> calendario. Preparado para features futuras
-(publicacao automatica, conexao com Instagram, metricas, planos pagos) sem
-necessidade de refatoracao estrutural.
+Fluxo funcional de ponta a ponta: registro -> onboarding em 3 passos -> Inicio
+(chips de produto/objetivo) -> Criar (perguntas, job unico com stages visiveis,
+preview em formato de celular) -> Aprovar / Refazer / Agendar -> biblioteca em
+abas -> calendario (semana padrao). Ideias, imagens e o CRUD de catalogo
+continuam em Configuracoes. Preparado para features futuras (publicacao
+automatica, conexao com Instagram, metricas, planos pagos) sem necessidade de
+refatoracao estrutural.

@@ -101,10 +101,16 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_VISION_MODEL: str = "gpt-4o-mini"
+    OPENAI_IMAGE_MODEL: str = "dall-e-3"
     OPENAI_TIMEOUT_SECONDS: int = 90
     OPENAI_BASE_URL: str | None = None
+    # Vazio segue `AI_PROVIDER`. Isolado para gerar stills com mock mesmo
+    # quando o texto ja usa OpenAI (e vice-versa).
+    IMAGE_PROVIDER: str | None = None
 
-    @field_validator("COOKIE_DOMAIN", "OPENAI_API_KEY", "OPENAI_BASE_URL", mode="before")
+    @field_validator(
+        "COOKIE_DOMAIN", "OPENAI_API_KEY", "OPENAI_BASE_URL", "IMAGE_PROVIDER", mode="before"
+    )
     @classmethod
     def _empty_string_to_none(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
@@ -130,6 +136,17 @@ class Settings(BaseSettings):
         """URL sincrona, usada por ferramentas que nao falam asyncpg."""
         return self.DATABASE_URL.replace("+asyncpg", "")
 
+    @property
+    def image_provider_name(self) -> AIProviderName:
+        if self.IMAGE_PROVIDER:
+            try:
+                return AIProviderName(self.IMAGE_PROVIDER.lower())
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"IMAGE_PROVIDER invalido: {self.IMAGE_PROVIDER}. Use mock ou openai."
+                ) from exc
+        return self.AI_PROVIDER
+
     def validate_runtime(self) -> None:
         """Checagens que devem falhar o boot, nao virar warning silencioso."""
         problems: list[str] = []
@@ -144,6 +161,8 @@ class Settings(BaseSettings):
 
         if self.AI_PROVIDER is AIProviderName.OPENAI and not self.OPENAI_API_KEY:
             problems.append("AI_PROVIDER=openai exige OPENAI_API_KEY")
+        if self.image_provider_name is AIProviderName.OPENAI and not self.OPENAI_API_KEY:
+            problems.append("IMAGE_PROVIDER=openai exige OPENAI_API_KEY")
 
         if problems:
             raise RuntimeError(
