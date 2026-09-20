@@ -13,6 +13,26 @@ async def _wait_job(client: AsyncClient, job_id: str) -> dict:
     return job
 
 
+async def _create_model(client: AsyncClient) -> str:
+    accepted = await client.post("/api/v1/talents/generate")
+    assert accepted.status_code == 202, accepted.text
+    assert accepted.json()["kind"] == "TALENT_GENERATION"
+    job = await _wait_job(client, accepted.json()["job_id"])
+    asset_id = job["result"]["asset_id"]
+    listed = (await client.get("/api/v1/assets", params={"kind": "MODEL_PHOTO"})).json()
+    assert any(item["id"] == asset_id and item["kind"] == "MODEL_PHOTO" for item in listed)
+    return asset_id
+
+
+async def test_talent_generation_saves_model_photo(user_with_business: ApiUser) -> None:
+    client = user_with_business.client
+    first = await _create_model(client)
+    second = await _create_model(client)
+    assert first != second
+    listed = (await client.get("/api/v1/assets", params={"kind": "MODEL_PHOTO"})).json()
+    assert {item["id"] for item in listed} == {first, second}
+
+
 async def test_instagram_campaign_image_and_copy(user_with_business: ApiUser) -> None:
     client = user_with_business.client
     product = await client.post(
@@ -22,10 +42,12 @@ async def test_instagram_campaign_image_and_copy(user_with_business: ApiUser) ->
     assert product.status_code == 201
     product_id = product.json()["id"]
 
+    model_id = await _create_model(client)
     accepted = await client.post(
         "/api/v1/campaigns/generate",
         json={
             "product_id": product_id,
+            "model_asset_id": model_id,
             "destination": "INSTAGRAM",
             "outputs": ["IMAGE", "COPY"],
         },
@@ -43,6 +65,8 @@ async def test_instagram_campaign_image_and_copy(user_with_business: ApiUser) ->
     assert campaign["status"] == "REVIEW"
     assert campaign["destination"] == "INSTAGRAM"
     assert campaign["product_id"] == product_id
+    assert campaign["model_asset_id"] == model_id
+    assert campaign["model"]["kind"] == "MODEL_PHOTO"
     assert len(campaign["contents"]) == 1
     content = campaign["contents"][0]
     assert content["campaign_id"] == campaign["id"]
@@ -61,9 +85,10 @@ async def test_tiktok_campaign_video_and_copy(user_with_business: ApiUser) -> No
         json={"name": "Tenis Nova", "description": "Tenis urbano branco", "price": 259.0},
     )
     product_id = product.json()["id"]
+    model_id = await _create_model(client)
     accepted = await client.post(
         "/api/v1/campaigns/generate",
-        json={"product_id": product_id, "destination": "TIKTOK"},
+        json={"product_id": product_id, "model_asset_id": model_id, "destination": "TIKTOK"},
     )
     assert accepted.status_code == 202, accepted.text
     job = await _wait_job(client, accepted.json()["job_id"])
@@ -93,10 +118,12 @@ async def test_tiktok_shop_includes_cta(user_with_business: ApiUser) -> None:
     cta = next(item for item in questions if item["key"] == "cta")
     assert any(option["value"] == "shop" for option in cta["options"])
 
+    model_id = await _create_model(client)
     accepted = await client.post(
         "/api/v1/campaigns/generate",
         json={
             "product_id": product_id,
+            "model_asset_id": model_id,
             "destination": "TIKTOK_SHOP",
             "answers": {"cta": "shop"},
         },
@@ -116,6 +143,16 @@ async def test_campaign_requires_product(user_with_business: ApiUser) -> None:
     assert response.status_code == 422
 
 
+async def test_campaign_requires_model(user_with_business: ApiUser) -> None:
+    client = user_with_business.client
+    product = await client.post("/api/v1/products", json={"name": "Bolsa"})
+    response = await client.post(
+        "/api/v1/campaigns/generate",
+        json={"product_id": product.json()["id"], "destination": "INSTAGRAM"},
+    )
+    assert response.status_code == 422
+
+
 async def test_regenerate_image_output(user_with_business: ApiUser) -> None:
     client = user_with_business.client
     product = await client.post(
@@ -123,10 +160,12 @@ async def test_regenerate_image_output(user_with_business: ApiUser) -> None:
         json={"name": "Cinto Ocre", "price": 120.0, "description": "Cinto de couro"},
     )
     product_id = product.json()["id"]
+    model_id = await _create_model(client)
     created = await client.post(
         "/api/v1/campaigns/generate",
         json={
             "product_id": product_id,
+            "model_asset_id": model_id,
             "destination": "INSTAGRAM",
             "outputs": ["IMAGE", "COPY"],
         },
@@ -162,9 +201,15 @@ async def test_campaign_list_filters_destination(user_with_business: ApiUser) ->
         json={"name": "Saia Lima", "price": 210.0, "description": "Saia midi"},
     )
     product_id = product.json()["id"]
+    model_id = await _create_model(client)
     created = await client.post(
         "/api/v1/campaigns/generate",
-        json={"product_id": product_id, "destination": "INSTAGRAM", "outputs": ["COPY"]},
+        json={
+            "product_id": product_id,
+            "model_asset_id": model_id,
+            "destination": "INSTAGRAM",
+            "outputs": ["COPY"],
+        },
     )
     await _wait_job(client, created.json()["job_id"])
     listed = (

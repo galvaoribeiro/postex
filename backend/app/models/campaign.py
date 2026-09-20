@@ -17,6 +17,7 @@ from app.models.base import Base, JSONType, TimestampMixin, UUIDPrimaryKeyMixin,
 from app.models.enums import CampaignDestination, CampaignStatus
 
 if TYPE_CHECKING:
+    from app.models.asset import Asset
     from app.models.business import Business
     from app.models.catalog import Product
     from app.models.content import Content
@@ -43,6 +44,11 @@ class Campaign(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("jobs.id", ondelete="SET NULL"),
         index=True,
     )
+    model_asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("assets.id", ondelete="SET NULL"),
+        index=True,
+    )
 
     destination: Mapped[CampaignDestination] = mapped_column(
         enum_column(CampaignDestination), index=True, nullable=False
@@ -65,6 +71,7 @@ class Campaign(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     business: Mapped["Business"] = relationship(back_populates="campaigns")
     product: Mapped["Product"] = relationship()
+    model: Mapped["Asset | None"] = relationship(foreign_keys=[model_asset_id])
     job: Mapped["Job | None"] = relationship()
     contents: Mapped[list["Content"]] = relationship(
         back_populates="campaign",

@@ -67,10 +67,16 @@ def _content_to_read(content, assets: AssetService) -> ContentRead:
 def _to_read(campaign: Campaign, assets: AssetService) -> CampaignRead:
     data = CampaignRead.model_validate(campaign)
     product = ProductRead.model_validate(campaign.product) if campaign.product else None
+    model = None
+    if campaign.model is not None:
+        model = AssetRead.model_validate(campaign.model).model_copy(
+            update={"url": assets.signed_url(campaign.model)}
+        )
     contents = [_content_to_read(item, assets) for item in campaign.contents]
     return data.model_copy(
         update={
             "product": product,
+            "model": model,
             "contents": contents,
             "allowed_transitions": CampaignService.allowed_transitions(campaign),
         }

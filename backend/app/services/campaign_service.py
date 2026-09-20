@@ -68,11 +68,13 @@ class CampaignService:
         destination: CampaignDestination,
         outputs: list[CampaignOutput] | None,
         brief: dict,
+        model_asset_id: uuid.UUID | None = None,
     ) -> Campaign:
         resolved = normalize_outputs(destination, outputs)
         campaign = Campaign(
             business_id=business_id,
             product_id=product_id,
+            model_asset_id=model_asset_id,
             destination=destination,
             outputs_requested=[item.value for item in resolved],
             failed_outputs=[],

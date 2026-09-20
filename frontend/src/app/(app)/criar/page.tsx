@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Download, ImagePlus, Plus, RefreshCw, Tag } from "lucide-react";
+import { ArrowLeft, Check, Download, ImagePlus, Plus, RefreshCw, Sparkles, Tag, User } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
@@ -25,6 +25,7 @@ import { Progress } from "@/components/ui/progress";
 import { assetsApi, uploadLinkedImage } from "@/lib/api/assets";
 import { campaignsApi } from "@/lib/api/campaigns";
 import { productsApi } from "@/lib/api/catalog";
+import { talentsApi } from "@/lib/api/talents";
 import { ApiError } from "@/lib/api/client";
 import type {
   AssetRead,
@@ -33,13 +34,12 @@ import type {
   CampaignRead,
   CreationQuestion,
   JobRead,
-  ProductRead,
 } from "@/lib/api/types";
 import { useJobWatcher } from "@/lib/hooks/use-job-watcher";
 import { queryKeys } from "@/lib/query-keys";
 import { cn, formatCurrency } from "@/lib/utils";
 
-type Step = "choice" | "questions" | "generating" | "preview";
+type Step = "choice" | "talent" | "questions" | "generating" | "preview";
 
 const DESTINATIONS: {
   value: CampaignDestination;
@@ -94,6 +94,10 @@ function CriarFlow() {
     queryKey: queryKeys.assets({ status: "READY" }),
     queryFn: () => assetsApi.list({ status: "READY" }),
   });
+  const { data: modelAssets } = useQuery({
+    queryKey: queryKeys.assets({ kind: "MODEL_PHOTO", status: "READY" }),
+    queryFn: () => assetsApi.list({ kind: "MODEL_PHOTO", status: "READY" }),
+  });
 
   const [step, setStep] = useState<Step>("choice");
   const [destination, setDestination] = useState<CampaignDestination | null>(() =>
@@ -101,6 +105,7 @@ function CriarFlow() {
   );
   const [outputs, setOutputs] = useState<CampaignOutput[]>(["IMAGE", "COPY"]);
   const [productId, setProductId] = useState<string | null>(() => searchParams.get("product"));
+  const [modelId, setModelId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<CreationQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -118,10 +123,13 @@ function CriarFlow() {
   const [error, setError] = useState<string | null>(null);
   const [stayOnChoice, setStayOnChoice] = useState(false);
   const [regenerating, setRegenerating] = useState<CampaignOutput | null>(null);
+  const [talentBusy, setTalentBusy] = useState(false);
+  const [talentError, setTalentError] = useState<string | null>(null);
 
   const lastRequest = useRef<{
     destination: CampaignDestination;
     productId: string;
+    modelId: string;
     outputs: CampaignOutput[];
     answers: Record<string, string>;
   } | null>(null);
@@ -147,26 +155,13 @@ function CriarFlow() {
     Boolean(resolvedProductId) &&
     selectedHasPhoto;
 
-  const bootQuestions = useQuery({
-    queryKey: queryKeys.campaignQuestions({
-      destination,
-      product_id: resolvedProductId,
-    }),
-    queryFn: () =>
-      campaignsApi.generateQuestions({
-        product_id: resolvedProductId!,
-        destination: destination!,
-      }),
-    enabled: bootReady && step === "choice",
-  });
-
-  const skipToQuestions =
-    !stayOnChoice && step === "choice" && bootQuestions.isSuccess && bootQuestions.data.length > 0;
+  const skipToTalent = !stayOnChoice && step === "choice" && bootReady && assetsReady;
 
   const generateCampaign = useCallback(
     async (payload: {
       destination: CampaignDestination;
       productId: string;
+      modelId: string;
       outputs: CampaignOutput[];
       answers: Record<string, string>;
     }) => {
@@ -180,6 +175,7 @@ function CriarFlow() {
       try {
         const accepted = await campaignsApi.generate({
           product_id: payload.productId,
+          model_asset_id: payload.modelId,
           destination: payload.destination,
           outputs: payload.outputs,
           answers: payload.answers,
@@ -220,11 +216,12 @@ function CriarFlow() {
   }
 
   async function finishQuestions(nextAnswers: Record<string, string>) {
-    if (!destination || !resolvedProductId) return;
+    if (!destination || !resolvedProductId || !modelId) return;
     await ensurePhoto(resolvedProductId);
     await generateCampaign({
       destination,
       productId: resolvedProductId,
+      modelId,
       outputs,
       answers: nextAnswers,
     });
@@ -242,6 +239,45 @@ function CriarFlow() {
     setBusy(true);
     try {
       await ensurePhoto(resolvedProductId);
+      setStep("talent");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Nao foi possivel continuar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateTalent() {
+    setTalentError(null);
+    setTalentBusy(true);
+    try {
+      const accepted = await talentsApi.generate();
+      const job = await watch(accepted.job_id, accepted.kind, {
+        showToast: false,
+        timeoutMs: 180_000,
+      });
+      if (!job || job.status !== "COMPLETED") {
+        setTalentError(job?.error_message ?? "Nao foi possivel gerar a modelo.");
+        return;
+      }
+      const assetId = typeof job.result?.asset_id === "string" ? job.result.asset_id : null;
+      await queryClient.invalidateQueries({ queryKey: queryKeys.assets() });
+      if (assetId) setModelId(assetId);
+    } catch (err) {
+      setTalentError(err instanceof ApiError ? err.message : "Nao foi possivel gerar a modelo.");
+    } finally {
+      setTalentBusy(false);
+    }
+  }
+
+  async function handleContinueTalent() {
+    if (!destination || !resolvedProductId) return;
+    if (!modelId) {
+      toast.error("Aprove ou escolha uma modelo para continuar.");
+      return;
+    }
+    setBusy(true);
+    try {
       const nextQuestions = await campaignsApi.generateQuestions({
         product_id: resolvedProductId,
         destination,
@@ -383,23 +419,18 @@ function CriarFlow() {
     !creatingProduct &&
     Boolean(resolvedProductId) &&
     (selectedHasPhoto || Boolean(photoFile));
-  const bootingFromQuery =
-    bootReady && step === "choice" && (bootQuestions.isPending || skipToQuestions);
+  const bootingFromQuery = skipToTalent;
 
-  if (skipToQuestions) {
-    setQuestions(bootQuestions.data);
-    setQuestionIndex(0);
-    setAnswers({});
-    setDraftAnswer("");
+  if (skipToTalent) {
     setPhotoFile(null);
-    setStep("questions");
+    setStep("talent");
   }
 
   return (
     <div>
       <PageHeader
         title="Gerar campanha"
-        description="Entregue o produto. A plataforma decide o conteudo que vende."
+        description="Escolha o produto e a modelo. A plataforma integra os dois e gera o conteudo que vende."
       />
 
       {bootingFromQuery && <PageSpinner label="Preparando..." />}
@@ -531,8 +562,99 @@ function CriarFlow() {
             disabled={!canContinueChoice}
             loading={busy}
           >
-            Gerar campanha
+            Continuar
           </Button>
+        </div>
+      )}
+
+      {step === "talent" && (
+        <div className="mx-auto max-w-2xl space-y-6">
+          <button
+            type="button"
+            onClick={() => {
+              setStayOnChoice(true);
+              setStep("choice");
+            }}
+            className="inline-flex items-center gap-1.5 text-sm text-foreground/55 hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" /> Voltar
+          </button>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Qual modelo usar?</h2>
+            <p className="mt-1 text-sm text-foreground/55">
+              Gere uma mulher para validar. Se gostar, aprove. Se nao, gere outra. Todas ficam na
+              biblioteca de imagens.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {(modelAssets ?? []).map((asset) => (
+              <button
+                key={asset.id}
+                type="button"
+                onClick={() => setModelId(asset.id)}
+                className={cn(
+                  "overflow-hidden rounded-2xl border text-left transition-colors",
+                  modelId === asset.id
+                    ? "border-brand-500 ring-2 ring-brand-200"
+                    : "border-border-subtle hover:border-brand-200"
+                )}
+              >
+                <div className="relative aspect-9/16 bg-surface-muted">
+                  {asset.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={asset.url}
+                      alt={asset.alt_text ?? "Modelo"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-foreground/30">
+                      <User className="h-8 w-8" />
+                    </div>
+                  )}
+                  {modelId === asset.id && (
+                    <span className="absolute right-2 top-2 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                      Aprovada
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => void generateTalent()}
+              disabled={talentBusy}
+              className="flex aspect-9/16 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-300 bg-brand-50/40 text-sm font-medium text-brand-800 hover:border-brand-400 disabled:opacity-60"
+            >
+              <Sparkles className="h-5 w-5" />
+              {talentBusy ? "Gerando..." : "Gerar nova modelo"}
+            </button>
+          </div>
+
+          {talentError && (
+            <p className="rounded-xl bg-danger-bg px-4 py-3 text-sm text-danger-fg">{talentError}</p>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void generateTalent()}
+              loading={talentBusy}
+              icon={<Sparkles className="h-4 w-4" />}
+            >
+              {modelId ? "Gerar outra" : "Gerar modelo"}
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => void handleContinueTalent()}
+              disabled={!modelId || talentBusy}
+              loading={busy}
+              icon={<Check className="h-4 w-4" />}
+            >
+              Aprovar e gerar campanha
+            </Button>
+          </div>
         </div>
       )}
 
@@ -549,8 +671,7 @@ function CriarFlow() {
           onNext={() => void handleQuestionNext()}
           onBack={() => {
             if (questionIndex === 0) {
-              setStayOnChoice(true);
-              setStep("choice");
+              setStep("talent");
               return;
             }
             setQuestionIndex((index) => index - 1);

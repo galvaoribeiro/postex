@@ -116,15 +116,17 @@ class FluxImageProvider(ImageProvider):
 
     def _kontext_payload(self, request: ImagePrompt) -> tuple[str, dict[str, Any]]:
         model = self.settings.FAL_KONTEXT_MODEL.strip().lstrip("/")
-        reference = request.references[0]
+        primary = request.references[0]
         payload: dict[str, Any] = {
             "prompt": request.prompt,
-            "image_url": _data_uri(reference),
+            "image_url": _data_uri(primary),
             "output_format": "png",
             "num_images": 1,
             "aspect_ratio": _aspect_ratio(request.size),
             "guidance_scale": 3.5,
         }
+        if len(request.references) > 1:
+            payload["image_urls"] = [_data_uri(item) for item in request.references]
         if request.seed:
             payload["seed"] = abs(int(request.seed)) % (2**31)
         return model, payload

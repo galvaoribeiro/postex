@@ -7,6 +7,7 @@ export * from "./assets";
 export * from "./ideas";
 export * from "./contents";
 export * from "./campaigns";
+export * from "./talents";
 export * from "./jobs";
 export * from "./ai";
 export * from "./dashboard";

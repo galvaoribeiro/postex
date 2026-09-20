@@ -11,7 +11,7 @@ import pytest
 
 from app.ai.content_engine import ProductionResult
 from app.ai.image.base import ImagePrompt, ImageReference
-from app.ai.image.prompt import build_still_prompt, parse_size, size_for_format
+from app.ai.image.prompt import build_still_prompt, build_talent_prompt, parse_size, size_for_format
 from app.ai.providers.flux_image_provider import FluxImageProvider
 from app.ai.providers.mock_image_provider import MockImageProvider
 from app.ai.providers.openai_image_provider import OpenAIImageProvider
@@ -141,6 +141,32 @@ def test_still_prompt_puts_focused_product_before_brief() -> None:
     assert low.index("espresso aroma") < low.index("creative brief")
     assert "ceramic cup" in low
     assert "do not substitute a gym" in low
+
+
+def test_talent_prompt_is_character_only() -> None:
+    request = build_talent_prompt(seed=3)
+    low = " ".join(request.prompt.split()).lower()
+    assert "criando a modelo" in low
+    assert "creative brief" in low
+    assert "image b" not in low
+    assert "campaign for" not in low
+    assert request.size == "1024x1792"
+    assert request.references == ()
+
+
+def test_still_prompt_with_approved_model_locks_identity() -> None:
+    request = build_still_prompt(
+        context=_prompt_context(),  # type: ignore[arg-type]
+        production=_production(),
+        seed=1,
+        has_reference=True,
+        has_model=True,
+    )
+    low = " ".join(request.prompt.split()).lower()
+    assert "attached image a" in low
+    assert "attached photo" in low
+    assert "identity lock" in low
+    assert low.index("attached image a") < low.index("attached photo")
 
 
 def test_still_prompt_with_reference_puts_fidelity_before_brief() -> None:
@@ -358,6 +384,24 @@ def test_flux_payload_uses_kontext_with_reference() -> None:
     assert payload["image_url"].startswith("data:image/png;base64,")
     assert base64.b64decode(payload["image_url"].split(",", 1)[1]) == b"foto"
     assert "image_size" not in payload
+    assert "image_urls" not in payload
+
+
+def test_flux_payload_sends_model_and_product_references() -> None:
+    provider = _flux_provider()
+    model_ref = ImageReference(data=b"modelo", mime_type="image/png", filename="a.png")
+    product_ref = ImageReference(data=b"produto", mime_type="image/jpeg", filename="b.jpg")
+    _model, payload = provider._build_payload(
+        ImagePrompt(
+            prompt="hello",
+            size="1024x1792",
+            references=(model_ref, product_ref),
+        )
+    )
+    assert payload["image_url"].startswith("data:image/png;base64,")
+    assert base64.b64decode(payload["image_url"].split(",", 1)[1]) == b"modelo"
+    assert len(payload["image_urls"]) == 2
+    assert base64.b64decode(payload["image_urls"][1].split(",", 1)[1]) == b"produto"
 
 
 def test_video_prompt_uses_creative_brief_and_scaled_timeline() -> None:

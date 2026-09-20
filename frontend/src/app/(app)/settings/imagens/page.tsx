@@ -31,6 +31,7 @@ const KIND_LABELS: Record<AssetKind, string> = {
   LOGO: "Logo",
   REFERENCE: "Referencia",
   AI_GENERATED: "Gerada por IA",
+  MODEL_PHOTO: "Modelo",
   VIDEO_GENERATED: "Video gerado",
   THUMBNAIL: "Thumbnail",
   OTHER: "Outro",
@@ -71,7 +72,7 @@ export default function AssetsPage() {
     <div>
       <PageHeader
         title="Biblioteca de Imagens"
-        description="Fotos do espaco, equipe e extras. A foto do produto e anexada em Criar ou ao editar o produto."
+        description="Fotos do espaco, equipe, modelos e extras. As modelos geradas na criacao ficam aqui, inclusive as que voce nao aprovou. A foto do produto e anexada em Criar."
         actions={
           <Button icon={<Upload className="h-4 w-4" />} onClick={() => setUploadOpen(true)}>
             Enviar imagem

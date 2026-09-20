@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import Field
 
 from app.models.enums import CampaignDestination, CampaignOutput, CampaignStatus
+from app.schemas.asset import AssetRead
 from app.schemas.catalog import ProductRead
 from app.schemas.common import APIModel, APIRequest
 from app.schemas.content import ContentRead
@@ -16,6 +17,7 @@ from app.schemas.content import ContentRead
 
 class CampaignGenerateRequest(APIRequest):
     product_id: uuid.UUID
+    model_asset_id: uuid.UUID
     destination: CampaignDestination
     outputs: list[CampaignOutput] | None = Field(
         default=None,
@@ -38,6 +40,7 @@ class CampaignRead(APIModel):
     id: uuid.UUID
     business_id: uuid.UUID
     product_id: uuid.UUID
+    model_asset_id: uuid.UUID | None = None
     job_id: uuid.UUID | None
     destination: CampaignDestination
     outputs_requested: list[CampaignOutput]
@@ -49,6 +52,7 @@ class CampaignRead(APIModel):
     created_at: datetime
     updated_at: datetime
     product: ProductRead | None = None
+    model: AssetRead | None = None
     contents: list[ContentRead] = Field(default_factory=list)
     allowed_transitions: list[CampaignStatus] = Field(default_factory=list)
 

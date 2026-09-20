@@ -46,6 +46,7 @@ class VideoService:
         seed: int,
         destination: CampaignDestination,
         product_id: uuid.UUID | None = None,
+        model_asset_id: uuid.UUID | None = None,
         replace_existing: bool = False,
     ) -> tuple[Asset, dict[str, object]]:
         content = await self.contents.get(business.id, content.id)
@@ -57,6 +58,7 @@ class VideoService:
             seed=seed,
             destination=destination,
             product_id=product_id,
+            model_asset_id=model_asset_id,
         )
         request = build_video_prompt(
             context=context,
@@ -130,6 +132,7 @@ class VideoService:
         seed: int,
         destination: CampaignDestination,
         product_id: uuid.UUID | None,
+        model_asset_id: uuid.UUID | None = None,
     ) -> tuple[ImageReference, uuid.UUID]:
         """Image-to-video parte do still da modelo, nunca da foto crua do produto.
 
@@ -155,6 +158,7 @@ class VideoService:
                 seed=seed,
                 product_id=product_id,
                 destination=destination,
+                model_asset_id=model_asset_id,
             )
 
         reference = await load_reference(self.assets.storage, cover)

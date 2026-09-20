@@ -16,7 +16,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.ai.content_engine import ProductionResult
 from app.ai.context_builder import BusinessContext
 from app.ai.image.base import ImageReference
-from app.ai.image.prompt import build_still_prompt
+from app.ai.image.prompt import build_still_prompt, build_talent_prompt
 from app.ai.image.registry import resolve_cover_provider
 from app.core.exceptions import StorageError
 from app.core.logging import get_logger
@@ -85,21 +85,27 @@ class StillService:
         product_id: uuid.UUID | None = None,
         service_id: uuid.UUID | None = None,
         destination: CampaignDestination | None = None,
+        model_asset_id: uuid.UUID | None = None,
         replace_existing: bool = False,
     ) -> tuple[Asset, dict[str, object]]:
         content = await self.contents.get(business.id, content.id)
-        reference, reference_asset_id = await self._load_focused_reference(
+        product_ref, product_asset_id = await self._load_focused_reference(
             business.id, product_id, service_id
+        )
+        model_ref, resolved_model_id = await self._load_model_reference(
+            business.id, model_asset_id
         )
         request = build_still_prompt(
             context=context,
             production=production,
             seed=seed,
-            has_reference=reference is not None,
+            has_reference=product_ref is not None,
+            has_model=model_ref is not None,
             destination=destination,
         )
-        if reference is not None:
-            request = replace(request, references=(reference,))
+        references = tuple(item for item in (model_ref, product_ref) if item is not None)
+        if references:
+            request = replace(request, references=references)
         generated = await resolve_cover_provider().generate(request)
 
         asset = await self.assets.create_generated(
@@ -125,8 +131,10 @@ class StillService:
             )
 
         image_meta = dict(generated.metadata())
-        if reference_asset_id is not None:
-            image_meta["reference_asset_id"] = str(reference_asset_id)
+        if product_asset_id is not None:
+            image_meta["reference_asset_id"] = str(product_asset_id)
+        if resolved_model_id is not None:
+            image_meta["model_asset_id"] = str(resolved_model_id)
         meta: dict[str, object] = {"image": image_meta}
         context_blob = dict(content.generation_context or {})
         context_blob.update(meta)
@@ -156,3 +164,40 @@ class StillService:
         if reference is None:
             return None, None
         return reference, chosen.id
+
+    async def _load_model_reference(
+        self,
+        business_id: uuid.UUID,
+        model_asset_id: uuid.UUID | None,
+    ) -> tuple[ImageReference | None, uuid.UUID | None]:
+        if model_asset_id is None:
+            return None, None
+        asset = await self.assets.get(business_id, model_asset_id)
+        if asset.kind is not AssetKind.MODEL_PHOTO or asset.status is not AssetStatus.READY:
+            return None, None
+        reference = await load_reference(self.assets.storage, asset)
+        if reference is None:
+            return None, None
+        return reference, asset.id
+
+    async def generate_talent(
+        self,
+        *,
+        business: Business,
+        seed: int,
+    ) -> tuple[Asset, dict[str, object]]:
+        request = build_talent_prompt(seed=seed)
+        generated = await resolve_cover_provider().generate(request)
+        asset = await self.assets.create_generated(
+            business.id,
+            data=generated.data,
+            mime_type=generated.mime_type,
+            filename=f"modelo-{uuid.uuid4().hex[:8]}.png",
+            kind=AssetKind.MODEL_PHOTO,
+            title="Modelo",
+            alt_text="Modelo gerada para campanhas.",
+            width=generated.width,
+            height=generated.height,
+            tags=["ai-generated", "model"],
+        )
+        return asset, {"image": dict(generated.metadata()), "asset_id": str(asset.id)}

@@ -13,6 +13,7 @@ const KIND_LABELS: Record<string, string> = {
   CONTENT_CREATION: "Criacao de conteudo",
   CAMPAIGN_GENERATION: "Geracao de campanha",
   CAMPAIGN_REGENERATION: "Regeneracao da campanha",
+  TALENT_GENERATION: "Geracao da modelo",
   ASSET_ANALYSIS: "Analise de imagem",
 };
 

@@ -14,7 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.registry import get_ai_provider
 from app.core.exceptions import ValidationError
 from app.models.business import Business
-from app.models.enums import AssetStatus, CampaignStatus, ContentObjective, JobKind, RegenerationScope
+from app.models.enums import (
+    AssetKind,
+    AssetStatus,
+    CampaignStatus,
+    ContentObjective,
+    JobKind,
+    RegenerationScope,
+)
 from app.models.job import Job
 from app.schemas.campaign import CampaignGenerateRequest, CampaignRegenerateRequest
 from app.schemas.content import (
@@ -104,8 +111,24 @@ class AIService:
             },
         )
 
+    async def request_talent_generation(self) -> Job:
+        job = await self.jobs.create(
+            business_id=self.business.id,
+            user_id=self.user_id,
+            kind=JobKind.TALENT_GENERATION,
+            provider=self.provider_name,
+            payload={},
+        )
+        await self.session.commit()
+        return job
+
     async def request_campaign_generation(self, data: CampaignGenerateRequest) -> tuple[Job, uuid.UUID]:
         product = await ProductService(self.session).get(self.business.id, data.product_id)
+        model = await self.assets.get(self.business.id, data.model_asset_id)
+        if model.kind is not AssetKind.MODEL_PHOTO:
+            raise ValidationError("A imagem selecionada nao e uma modelo.")
+        if model.status is not AssetStatus.READY:
+            raise ValidationError("A modelo ainda nao esta pronta.")
         outputs = normalize_outputs(data.destination, data.outputs)
         instruction = await persist_creation_answers(
             self.session,
@@ -124,6 +147,7 @@ class AIService:
             destination=data.destination,
             outputs=outputs,
             brief={"answers": data.answers, "instruction": instruction},
+            model_asset_id=model.id,
         )
         job = await self.jobs.create(
             business_id=self.business.id,
@@ -133,6 +157,7 @@ class AIService:
             payload={
                 "campaign_id": str(campaign.id),
                 "product_id": str(product.id),
+                "model_asset_id": str(model.id),
                 "destination": data.destination.value,
                 "outputs": [item.value for item in outputs],
                 "instruction": instruction,

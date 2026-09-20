@@ -24,6 +24,7 @@ export const campaignsApi = {
 
   generate: (payload: {
     product_id: string;
+    model_asset_id: string;
     destination: CampaignDestination;
     outputs?: CampaignOutput[] | null;
     answers?: Record<string, string>;

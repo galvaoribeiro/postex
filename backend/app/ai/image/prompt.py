@@ -11,6 +11,7 @@ from app.ai.content_engine import ProductionResult
 from app.ai.context_builder import BusinessContext
 from app.ai.image.base import ImagePrompt
 from app.ai.prompts.creative import (
+    CHARACTER_BRIEF,
     HARD_SAFETY,
     STILL_NEGATIVE,
     campaign_header,
@@ -35,12 +36,23 @@ def _join_prompt(*parts: str) -> str:
     return "\n\n".join(part.strip() for part in parts if part and part.strip())
 
 
+def build_talent_prompt(*, seed: int) -> ImagePrompt:
+    """Still so da modelo, sem produto. O usuario valida antes da campanha."""
+    return ImagePrompt(
+        prompt=_join_prompt(CHARACTER_BRIEF, HARD_SAFETY),
+        negative_prompt=" ".join(STILL_NEGATIVE.split()),
+        size="1024x1792",
+        seed=seed,
+    )
+
+
 def build_still_prompt(
     *,
     context: BusinessContext,
     production: ProductionResult,
     seed: int,
     has_reference: bool = False,
+    has_model: bool = False,
     destination: CampaignDestination | None = None,
 ) -> ImagePrompt:
     header = campaign_header(
@@ -50,7 +62,7 @@ def build_still_prompt(
     )
     prompt = _join_prompt(
         header,
-        still_creative_block(has_reference=has_reference),
+        still_creative_block(has_reference=has_reference, has_model=has_model),
         HARD_SAFETY,
     )
     size = (

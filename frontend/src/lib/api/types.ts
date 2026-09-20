@@ -25,6 +25,7 @@ export type AssetKind =
   | "LOGO"
   | "REFERENCE"
   | "AI_GENERATED"
+  | "MODEL_PHOTO"
   | "VIDEO_GENERATED"
   | "THUMBNAIL"
   | "OTHER";
@@ -54,6 +55,7 @@ export type JobKind =
   | "CONTENT_CREATION"
   | "CAMPAIGN_GENERATION"
   | "CAMPAIGN_REGENERATION"
+  | "TALENT_GENERATION"
   | "ASSET_ANALYSIS";
 
 export type JobStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -447,6 +449,7 @@ export interface CampaignRead {
   id: string;
   business_id: string;
   product_id: string;
+  model_asset_id?: string | null;
   job_id: string | null;
   destination: CampaignDestination;
   outputs_requested: CampaignOutput[];
@@ -458,6 +461,7 @@ export interface CampaignRead {
   created_at: string;
   updated_at: string;
   product: ProductRead | null;
+  model?: AssetRead | null;
   contents: ContentRead[];
   allowed_transitions: CampaignStatus[];
 }

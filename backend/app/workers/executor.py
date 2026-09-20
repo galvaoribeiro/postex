@@ -135,6 +135,7 @@ async def _run_handler(
         JobKind.CONTENT_CREATION: _handle_content_creation,
         JobKind.CAMPAIGN_GENERATION: _handle_campaign_generation,
         JobKind.CAMPAIGN_REGENERATION: _handle_campaign_regeneration,
+        JobKind.TALENT_GENERATION: _handle_talent_generation,
     }
     handler = handlers[kind]
 
@@ -351,12 +352,33 @@ async def _handle_content_creation(
     }
 
 
+async def _handle_talent_generation(
+    session: Any, business: Business, job_id: uuid.UUID, payload: dict[str, Any]
+) -> dict[str, Any]:
+    del payload
+    await JobService.set_stage(job_id, "modelo", 35)
+    asset, meta = await StillService(session).generate_talent(
+        business=business,
+        seed=int(job_id.int % 1_000_000),
+    )
+    await JobService.set_stage(job_id, "finalizando", 90)
+    return {
+        "asset_id": str(asset.id),
+        "image": meta.get("image"),
+    }
+
+
 async def _handle_campaign_generation(
     session: Any, business: Business, job_id: uuid.UUID, payload: dict[str, Any]
 ) -> dict[str, Any]:
     campaigns = CampaignService(session)
     campaign = await campaigns.get(business.id, uuid.UUID(payload["campaign_id"]))
     product_id = uuid.UUID(payload["product_id"])
+    model_asset_id = (
+        uuid.UUID(payload["model_asset_id"])
+        if payload.get("model_asset_id")
+        else campaign.model_asset_id
+    )
     destination = CampaignDestination(payload["destination"])
     outputs = [CampaignOutput(item) for item in payload.get("outputs") or []]
     instruction = payload.get("instruction") or destination_instruction(destination)
@@ -423,6 +445,7 @@ async def _handle_campaign_generation(
                 seed=int(job_id.int % 1_000_000),
                 product_id=product_id,
                 destination=destination,
+                model_asset_id=model_asset_id,
             )
             image_meta = still_meta.get("image") if isinstance(still_meta, dict) else still_meta
         except Exception as exc:  # noqa: BLE001 - falha parcial da saida
@@ -440,6 +463,7 @@ async def _handle_campaign_generation(
                 seed=int(job_id.int % 1_000_000),
                 destination=destination,
                 product_id=product_id,
+                model_asset_id=model_asset_id,
             )
             video_meta = video_blob.get("video") if isinstance(video_blob, dict) else video_blob
         except Exception as exc:  # noqa: BLE001 - falha parcial da saida
@@ -543,6 +567,7 @@ async def _handle_campaign_regeneration(
             seed=int(job_id.int % 1_000_000),
             product_id=product_id,
             destination=destination,
+            model_asset_id=campaign.model_asset_id,
             replace_existing=True,
         )
         result_blob["image"] = still_meta.get("image")
@@ -557,6 +582,7 @@ async def _handle_campaign_regeneration(
             seed=int(job_id.int % 1_000_000),
             destination=destination,
             product_id=product_id,
+            model_asset_id=campaign.model_asset_id,
             replace_existing=True,
         )
         result_blob["video"] = video_blob.get("video")

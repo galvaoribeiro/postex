@@ -47,89 +47,178 @@ CHARACTER_BRIEF = f"""\
 {CREATIVE_MARKER}
 
 CRIANDO A MODELO
-IDADE
+AGE
 
-[SOMENTE PARA MAIORES DE 18 ANOS — INSERIR IDADE]
+18
 
-COR DO CABELO
+HAIR COLOR
 
-[INSERIR COR DO CABELO]
+BLONDE
 
-OUTRAS CARACTERÍSTICAS
+OTHER CHARACTERISTICS
 
-[INSERIR OUTRAS CARACTERÍSTICAS FÍSICAS]
+TANNED ARM
 
-Crie uma selfie vertical ultra-realista no formato 9:16 de uma mulher brasileira adulta e atraente, com corpo feminino,
-curvilíneo, em forma e naturalmente voluptuoso. Ela deve parecer claramente uma mulher brasileira real, e não uma renderização de moda ou modelo gerado por IA.
-Respeite exatamente a idade, a cor do cabelo e as características adicionais fornecidas acima.
 
-Ela está em pé, naturalmente, em frente a um espelho de corpo inteiro dentro de sua casa no Brasil, tirando uma selfie casual com um iPhone 17 laranja.
-O telefone deve parecer autêntico, com proporções corretas e fisicamente convincente em sua mão.
-Ela o segura naturalmente na altura do peito/rosto, enquanto olha para a tela do telefone através do espelho.
+Create an ultra-photorealistic vertical 9:16 mirror selfie of an attractive adult Brazilian woman with a feminine,
+natural, fit and believable appearance.
 
-Esta imagem será posteriormente usada como personagem de referência para vídeos de moda realistas, portanto, sua identidade, traços faciais,
-penteado, proporções corporais, tom de pele e aparência geral devem ser claramente definidos e visualmente consistentes.
+She must clearly look like a real Brazilian woman rather than a fashion render or AI-generated model.
 
-Dê a ela uma aparência brasileira atraente, com anatomia realista, curvas naturalmente femininas, cintura definida,
-quadris e pernas proporcionais e uma silhueta favorecedora. Seu corpo deve parecer naturalmente em forma e curvilíneo, não
-exagerado, artificial, cirurgicamente impossível ou caricato.
+Respect exactly the age, hair color and additional characteristics provided above.
 
-Sua pose já deve lembrar o quadro de abertura de um vídeo casual de moda no espelho do TikTok: confiante, sutilmente
-sedutora e feminina, mas ainda completamente crível. Ela pode transferir levemente o peso para uma perna, inclinar suavemente
-um quadril, manter a outra perna relaxada, arquear sutilmente a postura e manter o braço livre naturalmente ao lado do corpo ou
-levemente próximo à cintura. A pose deve parecer espontânea, e não coreografada profissionalmente.
+She is standing naturally in front of a full-length mirror inside her own home in Brazil, casually taking a mirror
+selfie with an orange iPhone 17.
 
-Vista-a com uma roupa casual e elegante, apropriada para uma mulher adulta, como um vestido casual ajustado,
-um conjunto de blusa e saia combinando, uma blusa ajustada com shorts ou um conjunto esportivo estiloso. A roupa é temporária e
-não deve ocultar visualmente as proporções gerais do corpo dela, já que será substituída posteriormente por outras peças de roupa.
+The phone must look authentic, correctly proportioned and physically believable in her hand. She is holding it
+naturally at approximately upper-chest or face height while looking at the phone screen through the mirror.
 
-O ambiente deve transmitir inequivocamente a sensação de uma casa brasileira real e comum, e não de um apartamento de luxo americano,
-um estúdio fotográfico, um hotel ou um cenário de influenciadora. Use um interior residencial modesto e familiar: paredes pintadas em tons claros,
-pisos de cerâmica ou porcelanato simples, uma porta interna comum de madeira ou branca, móveis básicos de quarto ou guarda-roupa parcialmente visíveis, pequenos detalhes domésticos do dia a dia e um grande espelho de corpo inteiro comum encostado ou fixado na parede.
+This image will later be used as the reference character for realistic product demonstrations, advertisements,
+social-media videos and lifestyle content.
 
-Mantenha o ambiente ligeiramente imperfeito e com um aspecto genuinamente habitado. Inclua detalhes sutis e verossímeis, como um pequeno objeto em uma cômoda, roupa de cama simples, um cabo de carregamento, sandálias ou outro item cotidiano inofensivo ao fundo, mas não deixe o ambiente sujo, bagunçado ou com elementos que distraiam a atenção. Nada deve parecer cuidadosamente produzido para um anúncio.
+Her identity, facial features, hairstyle, body proportions, skin tone and overall appearance must therefore be
+clearly defined and visually consistent.
 
-Use iluminação natural típica de casas brasileiras. A luz suave do dia pode entrar por uma janela discreta, combinada com uma iluminação ambiente interna sutil. Evite iluminação de estúdio cinematográfica, LEDs coloridos, luzes de contorno dramáticas, iluminação de beleza, brilho artificial ou estética comercial de luxo.
+Give her realistic anatomy, natural body proportions, believable skin texture, realistic hands and fingers,
+natural facial asymmetry and authentic human characteristics.
 
-A imagem deve transmitir a sensação de que ela abriu a câmera casualmente e tirou a foto em casa.
+Her pose should already resemble the opening frame of a casual TikTok or Instagram product video.
 
-Aparência fotográfica: fotografia realista de smartphone capturada com uma câmera de iPhone 17 ou superior, HDR computacional natural, textura de pele realista, poros sutis, pequenas imperfeições, fios de cabelo realistas, textura de tecido verossímil, reflexos precisos, exposição natural, nitidez moderada do smartphone, alcance dinâmico realista e processamento sutil do sensor. Mantenha a imagem limpa e de alta qualidade, mas NÃO com um acabamento profissional.
+She should look confident, natural and approachable. Her free hand should remain naturally positioned in a way
+that allows it to interact with a future product when necessary.
 
-Não use desfoque de fundo extremo. A maior parte do ambiente deve permanecer razoavelmente reconhecível, como esperado de uma
-foto normal tirada com um smartphone no espelho.
+Do not force a specific interaction yet because the product will be introduced later.
 
-O reflexo no espelho deve ser fisicamente preciso. Seu corpo, mãos, dedos, smartphone, roupas, geometria do ambiente
-e o reflexo devem ser coerentes. O iPhone 17 laranja deve aparecer apenas onde for fisicamente apropriado e
-não deve ser duplicado.
+Dress her in a simple, neutral and fashionable outfit appropriate for an adult woman.
 
-Enquadre-a aproximadamente da cabeça aos joelhos ou quase o corpo inteiro, com o ambiente ao redor visível o suficiente para
-estabelecer que ela está dentro de uma casa brasileira real. Mantenha-a como o ponto focal óbvio, preservando a sensação amadora de
-selfie no espelho.
+The outfit should be visually clean and versatile so that different products can later be introduced without
+creating visual conflicts.
 
-Sua expressão deve ser relaxada, confiante e sutilmente sedutora, com olhos e boca naturais. Evite
-expressões exageradas de influenciadora, biquinho ou um olhar artificial de modelo.
+The environment must feel unmistakably like a real, ordinary Brazilian home rather than a luxury apartment,
+professional photography studio, hotel or influencer set.
 
-REGRAS DO REALISMO CRÍTICO
+Use a modest and familiar residential interior:
 
-Humano adulto fotorrealista
-Textura de pele realista
-Corpo anatomicamente correto
-Mãos e dedos anatomicamente corretos
-Assimetria facial natural
-Ambiente residencial brasileiro realista
-Física de espelhos precisa
-Reflexo correto do smartphone
-Proporções corporais realistas
-Gravidade crível
-Postura natural
-Composição autêntica de smartphone amador
+light painted walls
+simple ceramic or porcelain tile flooring
+normal wooden or white interior door
+basic bedroom or dressing furniture
+wardrobe or dresser partially visible
+large ordinary full-length mirror
+small everyday household details
 
-EVITE
+Keep the room slightly imperfect and genuinely lived-in.
 
-Rosto com aparência artificial
-Pele artificial
-Aparência de boneca
-Excesso
+Include subtle believable details such as simple bedding, a charging cable, sandals, a small object on a dresser
+or another harmless everyday item.
+
+Do not make the room dirty, cluttered or distracting.
+
+Nothing should look carefully staged for a commercial advertisement.
+
+Use natural Brazilian home lighting.
+
+Soft daylight may enter from an unseen window combined with subtle indoor ambient lighting.
+
+Avoid cinematic studio lighting, colored LEDs, dramatic rim lights, beauty lighting, artificial glow or luxury
+commercial aesthetics.
+
+The image should feel as if she casually opened her camera and took the photo herself at home.
+
+PHOTOGRAPHIC LOOK
+
+Realistic smartphone photography captured with an iPhone 17-class camera.
+
+Natural computational HDR.
+Realistic skin texture.
+Subtle pores.
+Tiny imperfections.
+Realistic hair strands.
+Believable fabric texture.
+Accurate reflections.
+Natural exposure.
+Moderate smartphone sharpening.
+Realistic dynamic range.
+Subtle sensor processing.
+
+Keep the image clean and high quality but NOT professionally polished.
+
+Do not use extreme background blur.
+
+Most of the room should remain reasonably recognizable, as expected from a normal smartphone mirror photo.
+
+The mirror reflection must be physically accurate.
+
+Her body, hands, fingers, smartphone, clothing, room geometry and reflection must all be coherent.
+
+The orange iPhone 17 must appear only where physically appropriate and must never be duplicated.
+
+Frame her approximately from head to knees or almost full body, with enough surrounding environment visible
+to establish that she is inside a real Brazilian home.
+
+Keep her as the obvious focal point while preserving the amateur mirror-selfie feeling.
+
+Her expression should be relaxed, confident and natural.
+
+Avoid exaggerated influencer expressions, duck face or an artificial fashion-model stare.
+
+
+CRITICAL REALISM RULES
+
+photorealistic adult human
+real skin texture
+anatomically correct body
+anatomically correct hands and fingers
+natural facial asymmetry
+realistic Brazilian residential environment
+accurate mirror physics
+correct smartphone reflection
+realistic body proportions
+believable gravity
+natural posture
+authentic amateur smartphone composition
+
+
+AVOID
+
+AI-looking face
+plastic skin
+doll-like appearance
+excessive beauty retouching
+unrealistic anatomy
+distorted hands
+extra fingers
+duplicated limbs
+warped phone
+incorrect mirror reflection
+duplicated objects
+floating objects
+impossible geometry
+glossy CGI appearance
+3D render
+illustration
+anime
+professional studio backdrop
+luxury mansion aesthetic
+cinematic lighting
+neon lights
+excessive bokeh
+text
+captions
+logos
+watermarks
+interface elements
+
+
+RESULTADO FINAL
+
+Aspect ratio: 9:16 vertical.
+
+Final result: an extremely realistic adult Brazilian woman casually taking a mirror selfie at home, visually
+indistinguishable from an authentic smartphone photo taken by a real person in Brazil.
+
+The image must provide a stable and consistent human reference for subsequent product integration and video
+generation.
 """
 
 # ---------------------------------------------------------------------------
@@ -246,6 +335,13 @@ by Image B. Physically believable, commercially useful and naturally created
 for social media.
 """
 
+APPROVED_MODEL_AS_IMAGE_A = """\
+ATTACHED IMAGE A = the approved woman already generated for this brand.
+Preserve her exact face, hair, body, skin, identity, clothing silhouette,
+mirror scene and photographic style. Do not invent a new person. Image A is
+the identity lock for the final still.
+"""
+
 REFERENCE_AS_IMAGE_B = """\
 GENERATED RESULT = a 9:16 mirror selfie of the woman (CRIANDO A MODELO)
 together with the commercial subject. Never output a product-only packshot,
@@ -332,11 +428,15 @@ def campaign_header(
     return "\n".join(lines)
 
 
-def still_creative_block(*, has_reference: bool) -> str:
+def still_creative_block(*, has_reference: bool, has_model: bool = False) -> str:
     lead = REFERENCE_AS_IMAGE_B if has_reference else NO_REFERENCE_PRODUCT
-    return "\n\n".join(
-        [lead.strip(), CHARACTER_BRIEF.strip(), PRODUCT_INTEGRATION_BRIEF.strip()]
-    )
+    parts = [lead.strip()]
+    if has_model:
+        parts.insert(0, APPROVED_MODEL_AS_IMAGE_A.strip())
+    else:
+        parts.append(CHARACTER_BRIEF.strip())
+    parts.append(PRODUCT_INTEGRATION_BRIEF.strip())
+    return "\n\n".join(parts)
 
 
 def video_creative_block(*, duration_seconds: int, has_reference: bool) -> str:

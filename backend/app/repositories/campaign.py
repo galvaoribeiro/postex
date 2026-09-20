@@ -20,6 +20,7 @@ class CampaignRepository(BusinessScopedRepository[Campaign]):
     def _with_relations(self, statement: Select[tuple[Campaign]]) -> Select[tuple[Campaign]]:
         return statement.options(
             selectinload(Campaign.product),
+            selectinload(Campaign.model),
             selectinload(Campaign.contents)
             .selectinload(Content.asset_links)
             .selectinload(ContentAsset.asset),
