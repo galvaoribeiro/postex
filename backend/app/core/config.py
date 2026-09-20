@@ -128,7 +128,9 @@ class Settings(BaseSettings):
     FAL_KONTEXT_MODEL: str = "fal-ai/flux-pro/kontext"
     FAL_TIMEOUT_SECONDS: int = 120
     FAL_VIDEO_MODEL: str = "fal-ai/kling-video/v1.6/standard/image-to-video"
-    FAL_VIDEO_TIMEOUT_SECONDS: int = 180
+    # Tempo maximo aguardando a fila da fal e baixando o MP4 (nao e duracao do clip).
+    FAL_VIDEO_TIMEOUT_SECONDS: int = 600
+    FAL_VIDEO_POLL_INTERVAL_SECONDS: float = 2.0
     # false = pede a fal para nao filtrar. A conta precisa estar autorizada
     # no painel da fal.ai; senão o checker continua ativo no servidor.
     FAL_ENABLE_SAFETY_CHECKER: bool = False

@@ -19,8 +19,6 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 _FAL_QUEUE = "https://queue.fal.run"
-_POLL_INTERVAL_SECONDS = 2.0
-_MAX_POLLS = 90
 
 
 class FalVideoProvider(VideoProvider):
@@ -41,6 +39,19 @@ class FalVideoProvider(VideoProvider):
     def default_model(self) -> str:
         return self.settings.FAL_VIDEO_MODEL
 
+    @property
+    def _poll_interval_seconds(self) -> float:
+        return max(0.5, float(self.settings.FAL_VIDEO_POLL_INTERVAL_SECONDS))
+
+    @property
+    def _max_polls(self) -> int:
+        budget = max(30, int(self.settings.FAL_VIDEO_TIMEOUT_SECONDS))
+        return max(1, int(budget / self._poll_interval_seconds))
+
+    def _http_timeout(self) -> httpx.Timeout:
+        read = float(max(30, self.settings.FAL_VIDEO_TIMEOUT_SECONDS))
+        return httpx.Timeout(30.0, read=read, write=read, pool=read)
+
     async def generate(self, request: VideoPrompt) -> GeneratedVideo:
         started = time.perf_counter()
         model = self.default_model.strip().lstrip("/")
@@ -54,13 +65,17 @@ class FalVideoProvider(VideoProvider):
         if request.seed:
             payload["seed"] = abs(int(request.seed)) % (2**31)
 
-        timeout = httpx.Timeout(20.0, read=float(self.settings.FAL_VIDEO_TIMEOUT_SECONDS))
+        timeout = self._http_timeout()
         try:
             async with httpx.AsyncClient(timeout=timeout) as http:
                 body = await self._run(http, model, payload)
                 raw = await self._extract_bytes(http, body)
         except httpx.TimeoutException as exc:
-            raise AIProviderError("A geracao do video demorou mais do que o limite.") from exc
+            raise AIProviderError(
+                "A geracao do video demorou mais do que o limite "
+                f"({self.settings.FAL_VIDEO_TIMEOUT_SECONDS}s). "
+                "Aumente FAL_VIDEO_TIMEOUT_SECONDS no .env se usar Seedance ou Kling."
+            ) from exc
         except httpx.HTTPError as exc:
             raise AIProviderError("Nao foi possivel conectar ao provedor de video (fal.ai).") from exc
 
@@ -99,7 +114,8 @@ class FalVideoProvider(VideoProvider):
                 return envelope
             raise AIProviderError("A fila de video nao devolveu URL de acompanhamento.")
 
-        for _ in range(_MAX_POLLS):
+        max_polls = self._max_polls
+        for attempt in range(max_polls):
             status_response = await http.get(status_url, headers=self._headers)
             if status_response.status_code >= 400:
                 raise AIProviderError(
@@ -114,9 +130,21 @@ class FalVideoProvider(VideoProvider):
                 return result.json()
             if status in {"FAILED", "ERROR", "CANCELLED"}:
                 raise AIProviderError("A geracao do video falhou.")
-            await asyncio.sleep(_POLL_INTERVAL_SECONDS)
+            if attempt and attempt % 15 == 0:
+                logger.info(
+                    "ai_video_queue_waiting",
+                    model=model,
+                    attempt=attempt,
+                    max_polls=max_polls,
+                    status=status or "UNKNOWN",
+                )
+            await asyncio.sleep(self._poll_interval_seconds)
 
-        raise AIProviderError("A geracao do video demorou mais do que o limite.")
+        raise AIProviderError(
+            "A geracao do video demorou mais do que o limite "
+            f"({self.settings.FAL_VIDEO_TIMEOUT_SECONDS}s). "
+            "Aumente FAL_VIDEO_TIMEOUT_SECONDS no .env se usar Seedance ou Kling."
+        )
 
     async def _extract_bytes(self, http: httpx.AsyncClient, body: dict[str, Any]) -> bytes:
         video = body.get("video") or {}
