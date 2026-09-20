@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.business import Business
-from app.models.catalog import Product, Service
+from app.models.catalog import Product
 from app.models.content import Content
 from app.models.enums import AssetStatus, ContentStatus, IdeaStatus
 from app.repositories.asset import AssetRepository
@@ -147,8 +147,8 @@ class DashboardService:
         return NextAction(
             kind="create",
             title="Criar conteudo",
-            description="Escolha o que divulgar e gere um post.",
-            cta_label="Criar conteudo",
+            description="Escolha o produto e gere uma campanha.",
+            cta_label="Gerar campanha",
             href="/criar",
         )
 
@@ -157,12 +157,6 @@ class DashboardService:
             business_id,
             filters=(Product.is_active.is_(True),),
             order_by=Product.created_at.desc(),
-            limit=QUICK_CREATE_LIMIT,
-        )
-        services = await self.services.list_for_business(
-            business_id,
-            filters=(Service.is_active.is_(True),),
-            order_by=Service.created_at.desc(),
             limit=QUICK_CREATE_LIMIT,
         )
         items: list[tuple] = [
@@ -174,15 +168,6 @@ class DashboardService:
                     price=float(product.price) if product.price is not None else None,
                 ))
                 for product in products
-            ),
-            *(
-                (service.created_at, QuickCreateItem(
-                    id=str(service.id),
-                    kind="service",
-                    name=service.name,
-                    price=float(service.price) if service.price is not None else None,
-                ))
-                for service in services
             ),
         ]
         items.sort(key=lambda pair: pair[0], reverse=True)

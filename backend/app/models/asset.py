@@ -54,6 +54,7 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     size_bytes: Mapped[int | None] = mapped_column(Integer)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer)
 
     title: Mapped[str | None] = mapped_column(String(180))
     alt_text: Mapped[str | None] = mapped_column(Text)
@@ -73,3 +74,7 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     @property
     def is_image(self) -> bool:
         return self.mime_type.startswith("image/")
+
+    @property
+    def is_video(self) -> bool:
+        return self.mime_type.startswith("video/")

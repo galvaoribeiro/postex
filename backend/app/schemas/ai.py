@@ -35,6 +35,8 @@ class AICapabilitiesRead(APIModel):
     supports_vision: bool
     image_provider: str
     image_model: str
+    video_provider: str
+    video_model: str
     execution_mode: str
     taxonomy_version: int
     default_idea_count: int

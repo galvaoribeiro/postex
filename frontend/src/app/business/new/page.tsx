@@ -11,24 +11,18 @@ import { FieldHint, FieldError, Input, Label, Textarea } from "@/components/ui/i
 import { PageSpinner } from "@/components/ui/spinner";
 import { assetsApi, readImageDimensions, uploadFileToSignedUrl } from "@/lib/api/assets";
 import { businessApi } from "@/lib/api/business";
-import { productsApi, servicesApi } from "@/lib/api/catalog";
+import { productsApi } from "@/lib/api/catalog";
 import { ApiError } from "@/lib/api/client";
-import type { ContentObjective } from "@/lib/api/types";
+import type { CampaignDestination } from "@/lib/api/types";
 import { useSession } from "@/lib/hooks/use-session";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
-const OBJECTIVES: { value: ContentObjective; label: string; description: string }[] = [
-  { value: "SELL", label: "Vender", description: "Mostrar um produto ou servico e convencer a pessoa a comprar." },
-  { value: "ATTRACT", label: "Atrair clientes", description: "Trazer gente nova para o perfil, sem pedir a compra agora." },
-  { value: "BRAND", label: "Fortalecer a marca", description: "Mostrar quem voce e e por que confiar no seu negocio." },
+const DESTINATIONS: { value: CampaignDestination; label: string; description: string }[] = [
+  { value: "INSTAGRAM", label: "Instagram", description: "Imagem comercial e copy para o feed." },
+  { value: "TIKTOK", label: "TikTok", description: "Video vertical, roteiro e legenda." },
+  { value: "TIKTOK_SHOP", label: "TikTok Shop", description: "Video comercial com CTA de compra." },
 ];
-
-const OBJECTIVE_LABELS: Record<ContentObjective, string> = {
-  SELL: "Vender",
-  ATTRACT: "Atrair clientes",
-  BRAND: "Fortalecer a marca",
-};
 
 export default function BusinessOnboardingPage() {
   const router = useRouter();
@@ -40,11 +34,10 @@ export default function BusinessOnboardingPage() {
   const [name, setName] = useState("");
   const [segment, setSegment] = useState("");
   const [description, setDescription] = useState("");
-  const [itemKind, setItemKind] = useState<"product" | "service">("product");
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [objective, setObjective] = useState<ContentObjective | null>(null);
+  const [destination, setDestination] = useState<CampaignDestination | null>(null);
   const [nameError, setNameError] = useState<string | undefined>();
   const [segmentError, setSegmentError] = useState<string | undefined>();
 
@@ -74,12 +67,8 @@ export default function BusinessOnboardingPage() {
   }
 
   async function finish() {
-    if (!objective) {
-      toast.error("Escolha um objetivo.");
-      return;
-    }
-    if (objective === "SELL" && !itemName.trim()) {
-      toast.error("Para vender, cadastre um produto ou servico.");
+    if (!itemName.trim()) {
+      toast.error("Cadastre o produto que voce quer vender.");
       setStep(2);
       return;
     }
@@ -89,53 +78,39 @@ export default function BusinessOnboardingPage() {
         name: name.trim(),
         segment: segment.trim(),
         description: description.trim() || null,
-        objectives: [OBJECTIVE_LABELS[objective]],
+        objectives: ["Vender"],
         differentiators: [],
       });
       queryClient.setQueryData(queryKeys.business, business);
       queryClient.invalidateQueries({ queryKey: queryKeys.session });
 
-      let productId: string | undefined;
-      let serviceId: string | undefined;
       const trimmedItem = itemName.trim();
       const price = itemPrice.trim() ? Number(itemPrice.replace(",", ".")) : null;
-      if (trimmedItem) {
-        if (itemKind === "product") {
-          const product = await productsApi.create({
-            name: trimmedItem,
-            price: price != null && !Number.isNaN(price) ? price : undefined,
-          });
-          productId = product.id;
-        } else {
-          const service = await servicesApi.create({
-            name: trimmedItem,
-            price: price != null && !Number.isNaN(price) ? price : undefined,
-          });
-          serviceId = service.id;
-        }
-        if (photoFile && (productId || serviceId)) {
-          const ticket = await assetsApi.createUploadUrl({
-            filename: photoFile.name,
-            mime_type: photoFile.type || "image/jpeg",
-            size_bytes: photoFile.size,
-            kind: "PRODUCT_PHOTO",
-            product_id: productId,
-            service_id: serviceId,
-          });
-          await uploadFileToSignedUrl(ticket, photoFile);
-          const dimensions = await readImageDimensions(photoFile);
-          await assetsApi.confirm(ticket.asset_id, {
-            size_bytes: photoFile.size,
-            width: dimensions?.width,
-            height: dimensions?.height,
-            analyze: false,
-          });
-        }
+      const product = await productsApi.create({
+        name: trimmedItem,
+        price: price != null && !Number.isNaN(price) ? price : undefined,
+      });
+      if (photoFile) {
+        const ticket = await assetsApi.createUploadUrl({
+          filename: photoFile.name,
+          mime_type: photoFile.type || "image/jpeg",
+          size_bytes: photoFile.size,
+          kind: "PRODUCT_PHOTO",
+          product_id: product.id,
+        });
+        await uploadFileToSignedUrl(ticket, photoFile);
+        const dimensions = await readImageDimensions(photoFile);
+        await assetsApi.confirm(ticket.asset_id, {
+          size_bytes: photoFile.size,
+          width: dimensions?.width,
+          height: dimensions?.height,
+          analyze: false,
+        });
       }
 
-      const params = new URLSearchParams({ objective });
-      if (productId) params.set("product", productId);
-      if (serviceId) params.set("service", serviceId);
+      const params = new URLSearchParams();
+      params.set("product", product.id);
+      if (destination) params.set("destination", destination);
       router.push(`/criar?${params.toString()}`);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Nao foi possivel terminar o cadastro.");
@@ -156,8 +131,8 @@ export default function BusinessOnboardingPage() {
           </p>
           <h1 className="mt-2 text-2xl font-semibold text-foreground">
             {step === 1 && "O que sua empresa faz?"}
-            {step === 2 && "O que voce vende?"}
-            {step === 3 && "Qual seu objetivo?"}
+            {step === 2 && "Qual produto voce vende?"}
+            {step === 3 && "Onde quer publicar?"}
           </h1>
         </div>
 
@@ -191,35 +166,13 @@ export default function BusinessOnboardingPage() {
 
         {step === 2 && (
           <div className="space-y-4 rounded-2xl border border-border-subtle bg-surface p-6">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setItemKind("product")}
-                className={cn(
-                  "flex-1 rounded-xl border px-3 py-2 text-sm font-medium",
-                  itemKind === "product" ? "border-brand-500 bg-brand-50 text-brand-800" : "border-border-subtle"
-                )}
-              >
-                Produto
-              </button>
-              <button
-                type="button"
-                onClick={() => setItemKind("service")}
-                className={cn(
-                  "flex-1 rounded-xl border px-3 py-2 text-sm font-medium",
-                  itemKind === "service" ? "border-brand-500 bg-brand-50 text-brand-800" : "border-border-subtle"
-                )}
-              >
-                Servico
-              </button>
-            </div>
             <div>
-              <Label htmlFor="item_name">Nome</Label>
+              <Label htmlFor="item_name">Nome do produto</Label>
               <Input
                 id="item_name"
                 value={itemName}
                 onChange={(event) => setItemName(event.target.value)}
-                placeholder={itemKind === "product" ? "Ex.: Cafe especial 250g" : "Ex.: Consultoria inicial"}
+                placeholder="Ex.: Bolsa de couro caramelo"
               />
             </div>
             <div>
@@ -260,14 +213,14 @@ export default function BusinessOnboardingPage() {
         {step === 3 && (
           <div className="space-y-4 rounded-2xl border border-border-subtle bg-surface p-6">
             <div className="grid gap-2">
-              {OBJECTIVES.map((entry) => (
+              {DESTINATIONS.map((entry) => (
                 <button
                   key={entry.value}
                   type="button"
-                  onClick={() => setObjective(entry.value)}
+                  onClick={() => setDestination(entry.value)}
                   className={cn(
                     "rounded-xl border px-4 py-3 text-left",
-                    objective === entry.value
+                    destination === entry.value
                       ? "border-brand-500 bg-brand-50"
                       : "border-border-subtle hover:border-brand-200"
                   )}
@@ -282,7 +235,7 @@ export default function BusinessOnboardingPage() {
                 Voltar
               </Button>
               <Button className="flex-1" onClick={() => void finish()} loading={busy}>
-                Comecar a criar
+                Comecar a gerar
               </Button>
             </div>
           </div>

@@ -9,6 +9,7 @@ from app.ai.production import all_strategies
 from app.ai.image.registry import get_image_provider
 from app.ai.registry import get_ai_provider
 from app.ai.taxonomy import get_taxonomy
+from app.ai.video.registry import get_video_provider
 from app.core.config import settings
 from app.core.deps import CurrentUser
 from app.schemas.ai import (
@@ -57,12 +58,15 @@ async def list_formats(user: CurrentUser) -> list[FormatRead]:
 async def get_capabilities(user: CurrentUser) -> AICapabilitiesRead:
     provider = get_ai_provider()
     image = get_image_provider()
+    video = get_video_provider()
     return AICapabilitiesRead(
         provider=provider.name,
         model=provider.default_model,
         supports_vision=provider.supports_vision,
         image_provider=image.name,
         image_model=image.default_model,
+        video_provider=video.name,
+        video_model=video.default_model,
         execution_mode=settings.AI_EXECUTION_MODE.value,
         taxonomy_version=get_taxonomy().version,
         default_idea_count=settings.AI_DEFAULT_IDEA_COUNT,

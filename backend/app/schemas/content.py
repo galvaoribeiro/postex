@@ -184,6 +184,8 @@ class ContentRead(APIModel):
     id: uuid.UUID
     business_id: uuid.UUID
     idea_id: uuid.UUID | None
+    campaign_id: uuid.UUID | None = None
+    product_id: uuid.UUID | None = None
     title: str
     concept: str | None
     objective: str | None

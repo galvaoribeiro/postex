@@ -18,12 +18,12 @@ from app.services.storage_service import get_storage_service
 logger = get_logger(__name__)
 
 DESCRIPTION = """\
-API do **Motor de Conteudo**: um estrategista de conteudo com IA para Instagram.
+API do **POSTEX**: transforme produtos em conteudo que vende.
 
 O fluxo do produto e:
 
-`Negocio -> Produtos/Servicos -> Contexto -> Motor de Conteudo -> Ideias ->
-Content -> Revisao -> Aprovacao -> Calendario`
+`Negocio -> Produto + foto -> Destino (Instagram / TikTok / TikTok Shop) ->
+Campanha (imagem, video, copy) -> Revisao -> Exportacao`
 
 Operacoes de IA respondem `202 Accepted` com um `job_id`; acompanhe em
 `GET /api/v1/jobs/{job_id}`.

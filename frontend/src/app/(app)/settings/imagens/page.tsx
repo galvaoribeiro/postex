@@ -31,6 +31,8 @@ const KIND_LABELS: Record<AssetKind, string> = {
   LOGO: "Logo",
   REFERENCE: "Referencia",
   AI_GENERATED: "Gerada por IA",
+  VIDEO_GENERATED: "Video gerado",
+  THUMBNAIL: "Thumbnail",
   OTHER: "Outro",
 };
 

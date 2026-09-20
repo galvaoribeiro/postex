@@ -11,7 +11,7 @@ import pytest
 
 from app.ai.content_engine import ProductionResult
 from app.ai.image.base import ImagePrompt, ImageReference
-from app.ai.image.prompt import CREATIVE_BRIEF, build_still_prompt, parse_size, size_for_format
+from app.ai.image.prompt import build_still_prompt, parse_size, size_for_format
 from app.ai.providers.flux_image_provider import FluxImageProvider
 from app.ai.providers.mock_image_provider import MockImageProvider
 from app.ai.providers.openai_image_provider import OpenAIImageProvider
@@ -85,23 +85,22 @@ def _production() -> ProductionResult:
     )
 
 
-def test_still_prompt_uses_creative_brief() -> None:
+def test_still_prompt_uses_commercial_direction() -> None:
     request = build_still_prompt(
         context=_prompt_context(),  # type: ignore[arg-type]
         production=_production(),
         seed=1,
     )
     low = " ".join(request.prompt.split()).lower()
-    brief = " ".join(CREATIVE_BRIEF.split()).lower()
-    assert brief in low
     assert "cafeteria aroma" in low
     assert "cafe" in low
     assert "over 25" in low
     assert "child" in request.negative_prompt.lower()
-    assert low.index("cafeteria aroma") < low.index("subject:")
+    assert "the product is the star" in low or "hero" in low
     assert "the scene represents the brand cafeteria aroma" in low
     assert "product fidelity" not in low
     assert request.references == ()
+    assert low.index("cafeteria aroma") < low.index("hero:")
 
 
 def test_still_prompt_puts_focused_product_before_brief() -> None:
@@ -135,9 +134,9 @@ def test_still_prompt_puts_focused_product_before_brief() -> None:
         seed=1,
     )
     low = " ".join(request.prompt.split()).lower()
-    assert low.index("espresso aroma") < low.index("subject:")
+    assert low.index("espresso aroma") < low.index("hero:")
     assert "ceramic cup" in low
-    assert "do not default to gym wear" in low
+    assert "do not default to a gym" in low
 
 
 def test_still_prompt_with_reference_puts_fidelity_before_brief() -> None:
@@ -151,7 +150,7 @@ def test_still_prompt_with_reference_puts_fidelity_before_brief() -> None:
     assert "product fidelity" in low
     assert "restage" in low
     assert "do not replace it with an invented product" in low
-    assert low.index("product fidelity") < low.index("subject:")
+    assert low.index("product fidelity") < low.index("hero:")
     assert low.index("product fidelity") < low.index("cafeteria aroma")
 
 

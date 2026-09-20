@@ -113,14 +113,18 @@ class ContentService:
         self,
         *,
         business_id: uuid.UUID,
-        result: ProductionResult,
+        result = ProductionResult,
         idea_id: uuid.UUID | None = None,
         planned_date: date | None = None,
+        campaign_id: uuid.UUID | None = None,
+        product_id: uuid.UUID | None = None,
     ) -> Content:
         fields = result.fields
         content = Content(
             business_id=business_id,
             idea_id=idea_id,
+            campaign_id=campaign_id,
+            product_id=product_id,
             title=str(fields["title"])[:240],
             concept=fields.get("concept"),
             objective=fields.get("objective"),
@@ -375,6 +379,20 @@ class ContentService:
         )
         await self.session.flush()
         return await self.get(content.business_id, content.id)
+
+    async def replace_role_asset(
+        self,
+        content: Content,
+        asset_id: uuid.UUID,
+        *,
+        role: ContentAssetRole,
+        position: int = 0,
+    ) -> Content:
+        for link in list(content.asset_links):
+            if link.role is role:
+                await self.session.delete(link)
+        await self.session.flush()
+        return await self.link_asset(content, asset_id, role=role, position=position)
 
     async def unlink_asset(self, content: Content, asset_id: uuid.UUID) -> Content:
         removed = False

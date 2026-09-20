@@ -8,6 +8,8 @@ export const queryKeys = {
   idea: (id: string) => ["ideas", id] as const,
   contents: (filters?: Record<string, unknown>) => ["contents", filters] as const,
   content: (id: string) => ["content", id] as const,
+  campaigns: (filters?: Record<string, unknown>) => ["campaigns", filters] as const,
+  campaign: (id: string) => ["campaign", id] as const,
   contentVersions: (id: string) => ["content-versions", id] as const,
   job: (id: string) => ["job", id] as const,
   dashboard: ["dashboard"] as const,
@@ -17,4 +19,6 @@ export const queryKeys = {
   capabilities: ["capabilities"] as const,
   creationQuestions: (filters?: Record<string, unknown>) =>
     ["creation-questions", filters] as const,
+  campaignQuestions: (filters?: Record<string, unknown>) =>
+    ["campaign-questions", filters] as const,
 };

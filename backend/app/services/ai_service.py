@@ -14,8 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.registry import get_ai_provider
 from app.core.exceptions import ValidationError
 from app.models.business import Business
-from app.models.enums import AssetStatus, JobKind, RegenerationScope
+from app.models.enums import AssetStatus, CampaignStatus, ContentObjective, JobKind, RegenerationScope
 from app.models.job import Job
+from app.schemas.campaign import CampaignGenerateRequest, CampaignRegenerateRequest
 from app.schemas.content import (
     ContentFromIdeaRequest,
     ContentGenerateRequest,
@@ -23,8 +24,15 @@ from app.schemas.content import (
     IdeaGenerateRequest,
 )
 from app.services.asset_service import AssetService
+from app.services.campaign_policy import normalize_outputs
+from app.services.campaign_service import CampaignService
 from app.services.content_service import ContentService
-from app.services.creation_questions import persist_creation_answers, resolve_creation_item
+from app.services.creation_questions import (
+    destination_instruction,
+    persist_creation_answers,
+    resolve_creation_item,
+)
+from app.services.catalog_service import ProductService
 from app.services.idea_service import IdeaService
 from app.services.job_service import JobService
 
@@ -38,6 +46,7 @@ class AIService:
         self.ideas = IdeaService(session)
         self.contents = ContentService(session)
         self.assets = AssetService(session)
+        self.campaigns = CampaignService(session)
 
     @property
     def provider_name(self) -> str:
@@ -94,6 +103,72 @@ class AIService:
                 "planned_date": data.planned_date.isoformat() if data.planned_date else None,
             },
         )
+
+    async def request_campaign_generation(self, data: CampaignGenerateRequest) -> tuple[Job, uuid.UUID]:
+        product = await ProductService(self.session).get(self.business.id, data.product_id)
+        outputs = normalize_outputs(data.destination, data.outputs)
+        instruction = await persist_creation_answers(
+            self.session,
+            self.business,
+            product=product,
+            service=None,
+            objective=ContentObjective.SELL,
+            answers=data.answers,
+        )
+        instruction = f"{destination_instruction(data.destination)} {instruction}"
+
+        campaign = await self.campaigns.create(
+            business_id=self.business.id,
+            product_id=product.id,
+            product_name=product.name,
+            destination=data.destination,
+            outputs=outputs,
+            brief={"answers": data.answers, "instruction": instruction},
+        )
+        job = await self.jobs.create(
+            business_id=self.business.id,
+            user_id=self.user_id,
+            kind=JobKind.CAMPAIGN_GENERATION,
+            provider=self.provider_name,
+            payload={
+                "campaign_id": str(campaign.id),
+                "product_id": str(product.id),
+                "destination": data.destination.value,
+                "outputs": [item.value for item in outputs],
+                "instruction": instruction,
+            },
+        )
+        await self.campaigns.attach_job(await self.campaigns.get(self.business.id, campaign.id), job.id)
+        await self.session.commit()
+        return job, campaign.id
+
+    async def request_campaign_regeneration(
+        self, campaign_id: uuid.UUID, data: CampaignRegenerateRequest
+    ) -> Job:
+        campaign = await self.campaigns.get(self.business.id, campaign_id)
+        if not campaign.contents:
+            raise ValidationError("Esta campanha ainda nao tem peca para regenerar.")
+        if data.output.value not in (campaign.outputs_requested or []):
+            raise ValidationError(
+                "Esta saida nao faz parte da campanha.",
+                details={"output": data.output.value},
+            )
+        campaign.status = CampaignStatus.GENERATING
+        await self.session.flush()
+        job = await self.jobs.create(
+            business_id=self.business.id,
+            user_id=self.user_id,
+            kind=JobKind.CAMPAIGN_REGENERATION,
+            provider=self.provider_name,
+            payload={
+                "campaign_id": str(campaign.id),
+                "output": data.output.value,
+                "instruction": data.instruction,
+            },
+        )
+        await self.campaigns.attach_job(await self.campaigns.get(self.business.id, campaign.id), job.id)
+        await self.session.commit()
+        return job
 
     async def request_production(self, data: ContentFromIdeaRequest) -> Job:
         # Valida a posse da ideia agora, no request, para que o erro apareca

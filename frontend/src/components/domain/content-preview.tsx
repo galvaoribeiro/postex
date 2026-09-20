@@ -90,7 +90,7 @@ export function ContentPreview({
           </div>
         </div>
         <p className="mt-3 text-center text-xs text-foreground/45">
-          {FORMAT_META[content.format].label} · still gerado, nao um video
+          Preview da peca · exporte os arquivos para publicar
         </p>
       </div>
       {actions && <div className="flex w-full max-w-md flex-wrap justify-center gap-2">{actions}</div>}

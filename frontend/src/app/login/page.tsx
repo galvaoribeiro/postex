@@ -27,8 +27,8 @@ export default function LoginPage() {
 
   return (
     <AuthLayout
-      title="Entrar no Motor de Conteudo"
-      description="Seu estrategista de conteudo para o Instagram"
+      title="Entrar no POSTEX"
+      description="Transforme produtos em conteudo que vende"
       footer={
         <>
           Ainda nao tem conta?{" "}

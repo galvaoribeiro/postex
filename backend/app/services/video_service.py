@@ -1,13 +1,8 @@
-"""Gera o still de capa e vincula ao Content.
-
-Monta o prompt, pede a imagem ao ImageProvider, grava no storage e liga
-como COVER. O executor so orquestra o stage.
-"""
+"""Gera o video da campanha e vincula ao Content."""
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
 from dataclasses import replace
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,65 +11,32 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.ai.content_engine import ProductionResult
 from app.ai.context_builder import BusinessContext
 from app.ai.image.base import ImageReference
-from app.ai.image.prompt import build_still_prompt
-from app.ai.image.registry import resolve_cover_provider
-from app.core.exceptions import StorageError
+from app.ai.video.prompt import build_video_prompt
+from app.ai.video.registry import get_video_provider
 from app.core.logging import get_logger
 from app.models.asset import Asset
 from app.models.business import Business
 from app.models.content import Content
-from app.models.enums import AssetKind, AssetStatus, CampaignDestination, ContentAssetRole
+from app.models.enums import (
+    AssetKind,
+    AssetStatus,
+    CampaignDestination,
+    ContentAssetRole,
+)
 from app.services.asset_service import AssetService
 from app.services.content_service import ContentService
-from app.services.storage_service import StorageService
+from app.services.still_service import load_reference, select_reference_asset
 
 logger = get_logger(__name__)
 
 
-def select_reference_asset(candidates: Sequence[Asset]) -> Asset | None:
-    """Prefere PRODUCT_PHOTO; senao a imagem mais recente do item.
-
-    `list_filtered` ja devolve `created_at` desc, entao o primeiro de cada
-    grupo e o mais recente.
-    """
-    images = [
-        item
-        for item in candidates
-        if str(getattr(item, "mime_type", "")).startswith("image/")
-    ]
-    if not images:
-        return None
-    photos = [item for item in images if item.kind == AssetKind.PRODUCT_PHOTO]
-    return (photos or images)[0]
-
-
-async def load_reference(storage: StorageService, asset: Asset) -> ImageReference | None:
-    try:
-        data = await storage.get_object(asset.storage_key)
-    except StorageError as exc:
-        logger.warning(
-            "still_reference_read_failed",
-            asset_id=str(getattr(asset, "id", "") or ""),
-            key=asset.storage_key,
-            error=str(exc),
-        )
-        return None
-    if not data:
-        return None
-    return ImageReference(
-        data=data,
-        mime_type=asset.mime_type or "image/png",
-        filename=asset.original_filename or "product.png",
-    )
-
-
-class StillService:
+class VideoService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.assets = AssetService(session)
         self.contents = ContentService(session)
 
-    async def attach_cover(
+    async def attach_video(
         self,
         *,
         business: Business,
@@ -82,52 +44,69 @@ class StillService:
         context: BusinessContext,
         production: ProductionResult,
         seed: int,
+        destination: CampaignDestination,
         product_id: uuid.UUID | None = None,
-        service_id: uuid.UUID | None = None,
-        destination: CampaignDestination | None = None,
         replace_existing: bool = False,
     ) -> tuple[Asset, dict[str, object]]:
         content = await self.contents.get(business.id, content.id)
         reference, reference_asset_id = await self._load_focused_reference(
-            business.id, product_id, service_id
+            business.id, product_id
         )
-        request = build_still_prompt(
+        request = build_video_prompt(
             context=context,
             production=production,
             seed=seed,
-            has_reference=reference is not None,
             destination=destination,
+            has_reference=reference is not None,
         )
         if reference is not None:
             request = replace(request, references=(reference,))
-        generated = await resolve_cover_provider().generate(request)
+        generated = await get_video_provider().generate(request)
 
         asset = await self.assets.create_generated(
             business.id,
             data=generated.data,
             mime_type=generated.mime_type,
-            filename=f"capa-{content.id}.png",
-            title=f"{content.title} · capa",
-            alt_text=f"Still gerado para {content.title}.",
+            filename=f"video-{content.id}.mp4",
+            kind=AssetKind.VIDEO_GENERATED,
+            title=f"{content.title} · video",
+            alt_text=f"Video gerado para {content.title}.",
             width=generated.width,
             height=generated.height,
+            duration_seconds=generated.duration_seconds,
             product_id=product_id,
-            service_id=service_id,
-            tags=["ai-generated", "cover"],
+            tags=["ai-generated", "video"],
         )
         if replace_existing:
             await self.contents.replace_role_asset(
-                content, asset.id, role=ContentAssetRole.COVER, position=0
+                content, asset.id, role=ContentAssetRole.PRIMARY_VIDEO, position=0
             )
         else:
             await self.contents.link_asset(
-                content, asset.id, role=ContentAssetRole.COVER, position=0
+                content, asset.id, role=ContentAssetRole.PRIMARY_VIDEO, position=0
             )
 
-        image_meta = dict(generated.metadata())
+        if generated.thumbnail_data:
+            thumb = await self.assets.create_generated(
+                business.id,
+                data=generated.thumbnail_data,
+                mime_type=generated.thumbnail_mime_type,
+                filename=f"thumb-{content.id}.png",
+                kind=AssetKind.THUMBNAIL,
+                title=f"{content.title} · thumbnail",
+                width=generated.width,
+                height=generated.height,
+                product_id=product_id,
+                tags=["ai-generated", "thumbnail"],
+            )
+            await self.contents.link_asset(
+                content, thumb.id, role=ContentAssetRole.THUMBNAIL, position=1
+            )
+
+        video_meta = dict(generated.metadata())
         if reference_asset_id is not None:
-            image_meta["reference_asset_id"] = str(reference_asset_id)
-        meta: dict[str, object] = {"image": image_meta}
+            video_meta["reference_asset_id"] = str(reference_asset_id)
+        meta: dict[str, object] = {"video": video_meta}
         context_blob = dict(content.generation_context or {})
         context_blob.update(meta)
         content.generation_context = context_blob
@@ -139,15 +118,13 @@ class StillService:
         self,
         business_id: uuid.UUID,
         product_id: uuid.UUID | None,
-        service_id: uuid.UUID | None,
     ) -> tuple[ImageReference | None, uuid.UUID | None]:
-        if product_id is None and service_id is None:
+        if product_id is None:
             return None, None
         candidates = await self.assets.list(
             business_id,
             status=AssetStatus.READY,
             product_id=product_id,
-            service_id=service_id,
         )
         chosen = select_reference_asset(candidates)
         if chosen is None:

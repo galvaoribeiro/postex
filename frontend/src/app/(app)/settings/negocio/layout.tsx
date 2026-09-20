@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/settings/negocio", label: "Negocio" },
   { href: "/settings/negocio/produtos", label: "Produtos" },
-  { href: "/settings/negocio/servicos", label: "Servicos" },
 ];
 
 export default function NegocioLayout({ children }: { children: ReactNode }) {

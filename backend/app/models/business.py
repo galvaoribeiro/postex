@@ -17,6 +17,7 @@ from app.models.base import Base, JSONType, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
     from app.models.asset import Asset
+    from app.models.campaign import Campaign
     from app.models.catalog import Product, Service
     from app.models.content import Content, ContentIdea
     from app.models.user import User
@@ -80,6 +81,9 @@ class Business(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="business", cascade="all, delete-orphan"
     )
     contents: Mapped[list["Content"]] = relationship(
+        back_populates="business", cascade="all, delete-orphan"
+    )
+    campaigns: Mapped[list["Campaign"]] = relationship(
         back_populates="business", cascade="all, delete-orphan"
     )
 

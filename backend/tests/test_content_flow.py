@@ -416,7 +416,7 @@ async def test_dashboard_next_action_follows_priority(user_with_business: ApiUse
     assert empty["next_action"]["kind"] == "create"
     assert empty["next_action"]["href"] == "/criar"
     assert empty["counters"]["total"] == 0
-    assert {item["kind"] for item in empty["quick_create"]} == {"product", "service"}
+    assert {item["kind"] for item in empty["quick_create"]} == {"product"}
 
     await _generate_ideas(client, count=3)
     with_ideas = (await client.get("/api/v1/dashboard")).json()

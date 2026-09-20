@@ -11,6 +11,8 @@ const KIND_LABELS: Record<string, string> = {
   CONTENT_PRODUCTION: "Producao de conteudo",
   CONTENT_REGENERATION: "Regeneracao de conteudo",
   CONTENT_CREATION: "Criacao de conteudo",
+  CAMPAIGN_GENERATION: "Geracao de campanha",
+  CAMPAIGN_REGENERATION: "Regeneracao da campanha",
   ASSET_ANALYSIS: "Analise de imagem",
 };
 
@@ -24,6 +26,7 @@ interface WatchOptions {
   /** Quando false, o toast de loading deixa de ser a UX principal (ex.: /criar). */
   showToast?: boolean;
   intervalMs?: number;
+  timeoutMs?: number;
   signal?: AbortSignal;
 }
 
@@ -46,6 +49,7 @@ export function useJobWatcher() {
     try {
       const job = await waitForJob(jobId, {
         intervalMs: options?.intervalMs,
+        timeoutMs: options?.timeoutMs,
         signal: options?.signal,
         onStage: options?.onStage,
         onUpdate: options?.onUpdate,

@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     assets,
     auth,
     business,
+    campaigns,
     content_ideas,
     contents,
     dashboard,
@@ -26,6 +27,7 @@ api_router.include_router(services.router)
 api_router.include_router(assets.router)
 api_router.include_router(content_ideas.router)
 api_router.include_router(contents.router)
+api_router.include_router(campaigns.router)
 api_router.include_router(jobs.router)
 api_router.include_router(ai.router)
 api_router.include_router(dashboard.router)

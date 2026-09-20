@@ -35,6 +35,11 @@ class ImageProviderName(str, Enum):
     FLUX = "flux"
 
 
+class VideoProviderName(str, Enum):
+    MOCK = "mock"
+    FAL = "fal"
+
+
 class AIExecutionMode(str, Enum):
     """Como as tarefas de IA sao executadas.
 
@@ -56,7 +61,7 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------ app
-    PROJECT_NAME: str = "Motor de Conteudo"
+    PROJECT_NAME: str = "POSTEX"
     API_V1_PREFIX: str = "/api/v1"
     ENVIRONMENT: Environment = Environment.DEVELOPMENT
     DEBUG: bool = True
@@ -97,6 +102,7 @@ class Settings(BaseSettings):
     S3_FORCE_PATH_STYLE: bool = True
     S3_PRESIGN_EXPIRE_SECONDS: int = 900
     MAX_UPLOAD_SIZE_MB: int = 15
+    MAX_VIDEO_UPLOAD_SIZE_MB: int = 80
 
     # ------------------------------------------------------------------- ia
     AI_PROVIDER: AIProviderName = AIProviderName.MOCK
@@ -115,11 +121,14 @@ class Settings(BaseSettings):
     # Vazio segue `AI_PROVIDER`. Isolado para gerar stills com mock mesmo
     # quando o texto ja usa OpenAI (e vice-versa).
     IMAGE_PROVIDER: str | None = None
+    VIDEO_PROVIDER: str | None = None
     FAL_KEY: str | None = None
     FAL_IMAGE_MODEL: str = "fal-ai/flux/dev"
     # So quando o still tem foto de produto. Text-to-image continua em FAL_IMAGE_MODEL.
     FAL_KONTEXT_MODEL: str = "fal-ai/flux-pro/kontext"
     FAL_TIMEOUT_SECONDS: int = 120
+    FAL_VIDEO_MODEL: str = "fal-ai/kling-video/v1.6/standard/image-to-video"
+    FAL_VIDEO_TIMEOUT_SECONDS: int = 180
     # false = pede a fal para nao filtrar. A conta precisa estar autorizada
     # no painel da fal.ai; senão o checker continua ativo no servidor.
     FAL_ENABLE_SAFETY_CHECKER: bool = False
@@ -129,6 +138,7 @@ class Settings(BaseSettings):
         "OPENAI_API_KEY",
         "OPENAI_BASE_URL",
         "IMAGE_PROVIDER",
+        "VIDEO_PROVIDER",
         "FAL_KEY",
         mode="before",
     )
@@ -158,6 +168,10 @@ class Settings(BaseSettings):
         return self.DATABASE_URL.replace("+asyncpg", "")
 
     @property
+    def max_video_upload_size_bytes(self) -> int:
+        return self.MAX_VIDEO_UPLOAD_SIZE_MB * 1024 * 1024
+
+    @property
     def image_provider_name(self) -> ImageProviderName:
         if self.IMAGE_PROVIDER:
             try:
@@ -167,6 +181,17 @@ class Settings(BaseSettings):
                     f"IMAGE_PROVIDER invalido: {self.IMAGE_PROVIDER}. Use mock, openai ou flux."
                 ) from exc
         return ImageProviderName(self.AI_PROVIDER.value)
+
+    @property
+    def video_provider_name(self) -> VideoProviderName:
+        if self.VIDEO_PROVIDER:
+            try:
+                return VideoProviderName(self.VIDEO_PROVIDER.lower())
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"VIDEO_PROVIDER invalido: {self.VIDEO_PROVIDER}. Use mock ou fal."
+                ) from exc
+        return VideoProviderName.MOCK
 
     def validate_runtime(self) -> None:
         """Checagens que devem falhar o boot, nao virar warning silencioso."""
@@ -186,6 +211,8 @@ class Settings(BaseSettings):
             problems.append("IMAGE_PROVIDER=openai exige OPENAI_API_KEY")
         if self.image_provider_name is ImageProviderName.FLUX and not self.FAL_KEY:
             problems.append("IMAGE_PROVIDER=flux exige FAL_KEY")
+        if self.video_provider_name is VideoProviderName.FAL and not self.FAL_KEY:
+            problems.append("VIDEO_PROVIDER=fal exige FAL_KEY")
 
         if problems:
             raise RuntimeError(

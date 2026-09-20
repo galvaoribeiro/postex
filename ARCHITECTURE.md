@@ -1,42 +1,40 @@
 # Arquitetura do POSTEX
 
-## Por que a ideacao virou etapa interna
+## Por que campanha no lugar de post
 
-O produto antigo pedia dois jobs visiveis: gerar ideias em `/ideas`, escolher um
-card e so depois produzir o post. Isso vazava taxonomia (pilares editoriais) e
-obrigava o usuario a entender um pipeline de redacao.
+O produto antigo gerava um post de Instagram a partir de um objetivo editorial
+(`SELL` / `ATTRACT` / `BRAND`) e formatos (Reel, carrossel, story). O usuario
+precisava saber o que postar.
 
-O fluxo diario agora e um unico pedido em `/criar`:
+O fluxo diario agora e um pedido de **campanha**:
 
-1. produto (cadastrar novo ou selecionar um existente, com foto) + objetivo (`SELL` / `ATTRACT` / `BRAND`)
-2. ate tres perguntas determinísticas
-3. um job `CONTENT_CREATION` com stages `ideia` → `roteiro` → `imagem` → `finalizando`
-4. preview para Aprovar, Refazer ou Agendar
+1. produto (cadastrar ou selecionar, com foto)
+2. destino (`INSTAGRAM` / `TIKTOK` / `TIKTOK_SHOP`)
+3. saidas (`IMAGE` / `VIDEO` / `COPY`), com recomendacao por destino
+4. ate tres perguntas comerciais
+5. um job `CAMPAIGN_GENERATION` com stages `analise` → `copy` → `imagem`/`video` → `finalizando`
+6. preview para Aprovar, Regenerar uma saida ou Exportar
 
 A geracao de ideias **nao foi apagada**. O worker ainda chama o motor de ideias
-por baixo, persiste uma ideia, produz o conteudo, gera um **still de capa**
-(negocio + produto/servico + cena da peca) e marca a ideia como usada.
-Quem quiser controle fino continua em **Configuracoes → Ideias**, sem polimento
-e fora do menu principal.
+por baixo, persiste uma ideia, produz o copy, gera imagem e/ou video e marca a
+ideia como usada. A tela de Ideias e o calendario saem do menu principal.
+Servicos deixam de aparecer no fluxo diario.
 
-O job `CONTENT_CREATION` expoe os stages `ideia` → `roteiro` → `imagem` →
-`finalizando`. A imagem passa por `ImageProvider` (`mock`, `openai` ou `flux`),
-separado do provedor de texto. O estilo visual base fica em um unico bloco
-editavel (`CREATIVE_BRIEF` em `app/ai/image/prompt.py`); produto, marca,
-local e direcao visual da peca sao injetados automaticamente no prompt.
-Nao ha seletor de apresentadora nem de tom na UI.
+Video real passa por `VideoProvider` (`mock` ou `fal`), separado do provedor de
+texto e de imagem. TikTok Shop, neste ciclo, e conteudo comercial exportavel —
+sem OAuth, catalogo ou publicacao automatica.
 
 ## Mapa de telas
 
 | Rota | Papel |
 | --- | --- |
-| `/inicio` | Atalho. Monta `/criar?product=&objective=`. Nao e wizard. |
-| `/criar` | Cadastro ou selecao do produto, foto e objetivo. Unica maquina do pedido. |
+| `/inicio` | Atalho. Monta `/criar?product=&destination=`. |
+| `/criar` | Cadastro ou selecao do produto, destino e saidas. Unica maquina do pedido. |
 | `/settings/negocio/produtos` | Editar, trocar foto e excluir produtos ja cadastrados. |
-| `/contents` | Biblioteca em abas (em criacao, para aprovar, agendados, publicados). |
-| `/contents/[id]` | Preview, Aprovar/Refazer/Agendar; editor em Ajustar; resto no menu `...`. |
-| `/calendar` | Semana por padrao, mes opcional. |
-| `/settings/*` | Negocio, imagens, ideias, conta. Instagram e plano ainda sao placeholder. |
+| `/contents` | Biblioteca de campanhas (em criacao, para revisar, aprovadas). |
+| `/contents/[id]` | Preview da campanha com abas Imagem / Video / Copy. |
+| `/calendar` | Preservado, fora do menu. |
+| `/settings/*` | Negocio, imagens, conta. Conexoes (IG/TikTok) ainda sao placeholder. |
 
 Rotas antigas (`/dashboard`, `/business`, `/products`, `/services`, `/assets`,
 `/ideas`) redirecionam para o lugar novo para nao quebrar bookmarks e o login.

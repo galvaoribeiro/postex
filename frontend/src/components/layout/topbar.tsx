@@ -86,7 +86,7 @@ export function Topbar({ business }: { business?: BusinessRead | null }) {
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileNavOpen(false)} />
           <div className="absolute left-0 top-0 flex h-full w-72 flex-col bg-surface p-4 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <span className="text-sm font-semibold text-brand-600">Motor de Conteudo</span>
+              <span className="text-sm font-semibold text-brand-600">POSTEX</span>
               <button onClick={() => setMobileNavOpen(false)} aria-label="Fechar">
                 <X className="h-5 w-5 text-foreground/60" />
               </button>

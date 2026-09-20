@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ValidationError
 from app.models.business import Business
 from app.models.catalog import Product, Service
-from app.models.enums import ContentObjective
+from app.models.enums import CampaignDestination, ContentObjective
 from app.schemas.content import CreationQuestion, QuestionOption
 from app.services.catalog_service import ProductService, ServiceCatalogService
 
@@ -44,6 +44,28 @@ CTA_OPTIONS = [
     QuestionOption(value="comment", label="Comentar no post"),
     QuestionOption(value="direct", label="Direct do Instagram"),
 ]
+
+CTA_OPTIONS_BY_DESTINATION: dict[CampaignDestination, list[QuestionOption]] = {
+    CampaignDestination.INSTAGRAM: CTA_OPTIONS,
+    CampaignDestination.TIKTOK: [
+        QuestionOption(value="whatsapp", label="WhatsApp"),
+        QuestionOption(value="website", label="Link da bio"),
+        QuestionOption(value="comment", label="Comentar no video"),
+        QuestionOption(value="profile", label="Seguir o perfil"),
+    ],
+    CampaignDestination.TIKTOK_SHOP: [
+        QuestionOption(value="shop", label="Comprar agora no TikTok Shop"),
+        QuestionOption(value="whatsapp", label="WhatsApp"),
+        QuestionOption(value="website", label="Site"),
+    ],
+}
+
+CTA_LABELS.update(
+    {
+        "profile": "o perfil",
+        "shop": "o TikTok Shop (botao Comprar agora)",
+    }
+)
 
 
 def _is_skipped(value: str | None) -> bool:
@@ -85,6 +107,7 @@ async def list_creation_questions(
     objective: ContentObjective,
     product: Product | None,
     service: Service | None,
+    destination: CampaignDestination | None = None,
 ) -> list[CreationQuestion]:
     questions: list[CreationQuestion] = []
 
@@ -103,12 +126,17 @@ async def list_creation_questions(
         )
 
     if not _has_default_cta(business):
+        cta_options = (
+            CTA_OPTIONS_BY_DESTINATION.get(destination, CTA_OPTIONS)
+            if destination is not None
+            else CTA_OPTIONS
+        )
         questions.append(
             CreationQuestion(
                 key="cta",
                 question="Onde a pessoa deve ir?",
                 kind="choice",
-                options=CTA_OPTIONS,
+                options=cta_options,
                 optional=True,
                 persist_to="business.content_preferences.default_cta",
             )
@@ -193,6 +221,22 @@ async def persist_creation_answers(
 
     await session.flush()
     return _instruction_from_answers(objective, cleaned)
+
+
+def destination_instruction(destination: CampaignDestination) -> str:
+    return {
+        CampaignDestination.INSTAGRAM: (
+            "Destino: Instagram. Produza copy pronta para o feed, com CTA claro."
+        ),
+        CampaignDestination.TIKTOK: (
+            "Destino: TikTok. Gancho nos 3 primeiros segundos, fala natural, "
+            "legendas curtas e CTA no video."
+        ),
+        CampaignDestination.TIKTOK_SHOP: (
+            "Destino: TikTok Shop. Video comercial com produto visivel, preco "
+            "quando houver, urgencia honesta e CTA de compra (Comprar agora)."
+        ),
+    }[destination]
 
 
 def _instruction_from_answers(objective: ContentObjective, answers: dict[str, str]) -> str:

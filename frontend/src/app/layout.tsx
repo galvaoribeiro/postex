@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Motor de Conteudo",
-  description: "O estrategista de conteudo com IA para o seu Instagram.",
+  title: "POSTEX",
+  description: "Transforme produtos em conteudo que vende.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

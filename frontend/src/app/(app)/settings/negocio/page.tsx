@@ -1,8 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -12,20 +11,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FieldError, Input, Label, Textarea } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Progress } from "@/components/ui/progress";
-import { Select } from "@/components/ui/select";
 import { TagInput } from "@/components/ui/tag-input";
-import { aiApi } from "@/lib/api/ai";
-import type { ContentFormat } from "@/lib/api/types";
 import { useBusiness, useUpdateBusiness } from "@/lib/hooks/use-business";
-import { queryKeys } from "@/lib/query-keys";
-import { cn } from "@/lib/utils";
-
-const FORMATS: { value: ContentFormat; label: string }[] = [
-  { value: "REEL", label: "Reel" },
-  { value: "IMAGE_POST", label: "Post" },
-  { value: "CAROUSEL", label: "Carrossel" },
-  { value: "STORY", label: "Story" },
-];
 
 const profileSchema = z.object({
   name: z.string().min(2).max(160),
@@ -45,7 +32,6 @@ type ProfileValues = z.infer<typeof profileSchema>;
 
 export default function BusinessSettingsPage() {
   const { data: business, isLoading } = useBusiness();
-  const [tab, setTab] = useState<"profile" | "preferences">("profile");
 
   if (isLoading || !business) {
     return <PageSpinner label="Carregando negocio..." />;
@@ -55,7 +41,7 @@ export default function BusinessSettingsPage() {
     <div>
       <PageHeader
         title="Meu Negocio"
-        description="Essas informacoes sao a base do contexto que a IA usa para gerar ideias e conteudos."
+        description="Essas informacoes viram contexto comercial para as campanhas de produto."
       />
 
       <Card className="mb-6">
@@ -66,44 +52,13 @@ export default function BusinessSettingsPage() {
           </div>
           <Progress value={business.completeness_score} />
           <p className="mt-2 text-xs text-foreground/50">
-            Quanto mais completo, mais especificas ficam as ideias geradas pelo Motor de Conteudo.
+            Quanto mais completo, mais especificas ficam as campanhas geradas a partir dos seus produtos.
           </p>
         </CardContent>
       </Card>
 
-      <div className="mb-6 flex gap-2 rounded-xl bg-surface-muted p-1">
-        <TabButton active={tab === "profile"} onClick={() => setTab("profile")}>
-          Perfil do negocio
-        </TabButton>
-        <TabButton active={tab === "preferences"} onClick={() => setTab("preferences")}>
-          Preferencias de conteudo
-        </TabButton>
-      </div>
-
-      {tab === "profile" ? <ProfileForm business={business} /> : <PreferencesForm business={business} />}
+      <ProfileForm business={business} />
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-        active ? "bg-surface text-brand-700 shadow-sm" : "text-foreground/55 hover:text-foreground"
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -219,7 +174,7 @@ function ProfileForm({ business }: { business: NonNullable<ReturnType<typeof use
           </div>
 
           <div>
-            <Label>Objetivos com o Instagram</Label>
+            <Label>Objetivos comerciais</Label>
             <Controller
               control={control}
               name="objectives"
@@ -238,183 +193,6 @@ function ProfileForm({ business }: { business: NonNullable<ReturnType<typeof use
             </Button>
           </div>
         </form>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PreferencesForm({ business }: { business: NonNullable<ReturnType<typeof useBusiness>["data"]> }) {
-  const update = useUpdateBusiness();
-  const { data: taxonomy } = useQuery({ queryKey: queryKeys.taxonomy, queryFn: aiApi.taxonomy });
-
-  const [preferredFormats, setPreferredFormats] = useState<ContentFormat[]>(
-    business.content_preferences.preferred_formats as ContentFormat[]
-  );
-  const [preferredCategories, setPreferredCategories] = useState<string[]>(
-    business.content_preferences.preferred_categories
-  );
-  const [avoidedCategories, setAvoidedCategories] = useState<string[]>(
-    business.content_preferences.avoided_categories
-  );
-  const [postsPerWeek, setPostsPerWeek] = useState(business.content_preferences.posts_per_week);
-  const [emojiUsage, setEmojiUsage] = useState(business.content_preferences.emoji_usage);
-  const [forbiddenTopics, setForbiddenTopics] = useState<string[]>(
-    business.content_preferences.forbidden_topics
-  );
-  const [extraGuidelines, setExtraGuidelines] = useState(business.content_preferences.extra_guidelines);
-
-  function toggleFormat(format: ContentFormat) {
-    setPreferredFormats((prev) =>
-      prev.includes(format) ? prev.filter((f) => f !== format) : [...prev, format]
-    );
-  }
-
-  function toggleCategory(key: string, list: "preferred" | "avoided") {
-    if (list === "preferred") {
-      setPreferredCategories((prev) =>
-        prev.includes(key) ? prev.filter((c) => c !== key) : [...prev, key]
-      );
-      setAvoidedCategories((prev) => prev.filter((c) => c !== key));
-    } else {
-      setAvoidedCategories((prev) => (prev.includes(key) ? prev.filter((c) => c !== key) : [...prev, key]));
-      setPreferredCategories((prev) => prev.filter((c) => c !== key));
-    }
-  }
-
-  function handleSave() {
-    update.mutate({
-      content_preferences: {
-        preferred_formats: preferredFormats,
-        preferred_categories: preferredCategories,
-        avoided_categories: avoidedCategories,
-        posts_per_week: postsPerWeek,
-        language: business.content_preferences.language,
-        emoji_usage: emojiUsage,
-        forbidden_topics: forbiddenTopics,
-        extra_guidelines: extraGuidelines,
-      },
-    });
-  }
-
-  return (
-    <Card>
-      <CardContent className="space-y-6 p-6">
-        <div>
-          <Label>Formatos preferidos</Label>
-          <div className="flex flex-wrap gap-2">
-            {FORMATS.map((format) => (
-              <button
-                key={format.value}
-                type="button"
-                onClick={() => toggleFormat(format.value)}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-                  preferredFormats.includes(format.value)
-                    ? "border-brand-500 bg-brand-50 text-brand-700"
-                    : "border-border-subtle text-foreground/55 hover:border-brand-200"
-                )}
-              >
-                {format.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {taxonomy && (
-          <div>
-            <Label>Pilares editoriais</Label>
-            <p className="mb-2 text-xs text-foreground/50">
-              Marque como preferido para priorizar, ou como evitar para reduzir a frequencia.
-            </p>
-            <div className="space-y-2">
-              {taxonomy.categories.map((category) => (
-                <div
-                  key={category.key}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border-subtle p-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{category.label}</p>
-                    <p className="text-xs text-foreground/50">{category.description}</p>
-                  </div>
-                  <div className="flex shrink-0 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => toggleCategory(category.key, "preferred")}
-                      className={cn(
-                        "rounded-full px-2.5 py-1 text-xs font-medium",
-                        preferredCategories.includes(category.key)
-                          ? "bg-success-bg text-success-fg"
-                          : "bg-surface-muted text-foreground/50 hover:text-foreground"
-                      )}
-                    >
-                      Preferido
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleCategory(category.key, "avoided")}
-                      className={cn(
-                        "rounded-full px-2.5 py-1 text-xs font-medium",
-                        avoidedCategories.includes(category.key)
-                          ? "bg-danger-bg text-danger-fg"
-                          : "bg-surface-muted text-foreground/50 hover:text-foreground"
-                      )}
-                    >
-                      Evitar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="posts_per_week">Posts por semana (meta)</Label>
-            <Input
-              id="posts_per_week"
-              type="number"
-              min={1}
-              max={21}
-              value={postsPerWeek}
-              onChange={(event) => setPostsPerWeek(Number(event.target.value))}
-            />
-          </div>
-          <div>
-            <Label htmlFor="emoji_usage">Uso de emojis</Label>
-            <Select
-              id="emoji_usage"
-              value={emojiUsage}
-              onChange={(event) => setEmojiUsage(event.target.value)}
-            >
-              <option value="nenhum">Nenhum</option>
-              <option value="moderado">Moderado</option>
-              <option value="frequente">Frequente</option>
-            </Select>
-          </div>
-        </div>
-
-        <div>
-          <Label>Temas proibidos</Label>
-          <TagInput value={forbiddenTopics} onChange={setForbiddenTopics} placeholder="Ex.: politica" />
-        </div>
-
-        <div>
-          <Label htmlFor="extra_guidelines">Diretrizes adicionais para a IA</Label>
-          <Textarea
-            id="extra_guidelines"
-            rows={3}
-            value={extraGuidelines}
-            onChange={(event) => setExtraGuidelines(event.target.value)}
-            placeholder="Ex.: Sempre mencionar horario de funcionamento nos posts de produto."
-          />
-        </div>
-
-        <div className="flex justify-end">
-          <Button onClick={handleSave} loading={update.isPending}>
-            Salvar preferencias
-          </Button>
-        </div>
       </CardContent>
     </Card>
   );

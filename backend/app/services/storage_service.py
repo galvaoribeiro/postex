@@ -34,6 +34,7 @@ logger = get_logger(__name__)
 ALLOWED_IMAGE_MIME_TYPES = frozenset(
     {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"}
 )
+ALLOWED_VIDEO_MIME_TYPES = frozenset({"video/mp4", "video/webm", "video/quicktime"})
 
 _SAFE_FILENAME = re.compile(r"[^a-zA-Z0-9._-]+")
 
@@ -139,21 +140,40 @@ class StorageService:
             f"{uuid.uuid4().hex}-{_slugify_filename(filename)}"
         )
 
-    def validate_upload(self, *, filename: str, mime_type: str, size_bytes: int | None) -> str:
+    def validate_upload(
+        self, *, filename: str, mime_type: str, size_bytes: int | None, media: str = "image"
+    ) -> str:
         """Valida o upload solicitado e devolve o mime type normalizado."""
         resolved = (mime_type or "").strip().lower()
         if not resolved:
             resolved = mimetypes.guess_type(filename)[0] or ""
 
-        if resolved not in ALLOWED_IMAGE_MIME_TYPES:
+        if media == "video":
+            allowed = ALLOWED_VIDEO_MIME_TYPES
+            max_bytes = self.settings.max_video_upload_size_bytes
+            max_mb = self.settings.MAX_VIDEO_UPLOAD_SIZE_MB
+        elif media == "any":
+            allowed = ALLOWED_IMAGE_MIME_TYPES | ALLOWED_VIDEO_MIME_TYPES
+            if resolved in ALLOWED_VIDEO_MIME_TYPES:
+                max_bytes = self.settings.max_video_upload_size_bytes
+                max_mb = self.settings.MAX_VIDEO_UPLOAD_SIZE_MB
+            else:
+                max_bytes = self.settings.max_upload_size_bytes
+                max_mb = self.settings.MAX_UPLOAD_SIZE_MB
+        else:
+            allowed = ALLOWED_IMAGE_MIME_TYPES
+            max_bytes = self.settings.max_upload_size_bytes
+            max_mb = self.settings.MAX_UPLOAD_SIZE_MB
+
+        if resolved not in allowed:
             raise ValidationError(
                 "Formato de arquivo nao suportado.",
-                details={"received": resolved, "allowed": sorted(ALLOWED_IMAGE_MIME_TYPES)},
+                details={"received": resolved, "allowed": sorted(allowed)},
             )
 
-        if size_bytes is not None and size_bytes > self.settings.max_upload_size_bytes:
+        if size_bytes is not None and size_bytes > max_bytes:
             raise ValidationError(
-                f"Arquivo maior que o limite de {self.settings.MAX_UPLOAD_SIZE_MB} MB.",
+                f"Arquivo maior que o limite de {max_mb} MB.",
                 details={"size_bytes": size_bytes},
             )
 

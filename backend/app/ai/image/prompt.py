@@ -1,8 +1,8 @@
-"""Montagem do prompt de still.
+"""Montagem do prompt de imagem comercial.
 
-A direcao criativa (pessoa, ambiente, roupa, look) vive num unico bloco
-abaixo. Produto, marca e cena da peca entram ANTES desse bloco — Flux
-atende sobretudo o comeco do texto (CLIP ~77 tokens, T5 ~512).
+Produto, marca e cena da peca entram no comeco (Flux atende sobretudo o
+inicio do texto). A direcao visual e derivada do negocio e do destino —
+nao ha persona fixa.
 """
 
 from __future__ import annotations
@@ -10,65 +10,44 @@ from __future__ import annotations
 from app.ai.content_engine import ProductionResult
 from app.ai.context_builder import BusinessContext
 from app.ai.image.base import ImagePrompt
-from app.models.enums import ContentFormat
-
-# =============================================================================
-# EDITE SOMENTE ESTE BLOCO
-# =============================================================================
-#
-# Um unico lugar para descrever o still. Sempre que quiser mudar o visual,
-# altere so o texto abaixo — persona, ambiente, roupa, pose, clima, camera.
-#
-# O que entra sozinho, ANTES deste bloco (nao precisa repetir aqui):
-#   - produto/servico em foco e nome da marca
-#   - cena extraida da peca (titulo, conceito, direcao visual)
-#   - regras duras de seguranca (adulta, ficticia, sem nu, sem menor)
-#
-# Escreva em ingles: o modelo de imagem lê este texto literalmente.
-# No Flux, o começo do prompt pesa mais: evite listar academia/shorts/crop
-# como default, senão esses visuais vencem o produto.
-
-CREATIVE_BRIEF = """
-Subject: Adult fictional Brazilian woman, approximately 30 years old, exceptionally attractive, tall, with a fit and naturally feminine physique, healthy proportions, long voluminous wavy hair, warm medium skin tone, defined facial features, expressive eyes and a natural confident smile. She has an elegant, approachable and sophisticated presence. She is entirely fictional and does not resemble any real person or celebrity.
-
-Body & Pose: Full-body composition, head-to-toe visible, including both feet. Confident but natural upright posture, relaxed shoulders, subtle dynamic pose, as if presenting or using the product naturally. Realistic anatomy and proportions.
-
-Clothing: Contemporary Brazilian fashion that matches the business and product at the start of this prompt. Dress her as a real customer or staff of THIS business would dress. Do not default to gym wear, crop tops, shorts or athletic clothing unless the business is fitness, sports or beachwear. Fully clothed; garments remain securely in place.
-
-Environment: Match architecture, furniture, props, lighting and atmosphere to the business, product and scene at the start of this prompt. A cafe must look like a cafe; a restaurant like a restaurant; a boutique like a boutique. Do not default to a gym, generic studio, showroom or lifestyle backdrop.
-
-Lighting & Photography: Photorealistic high-end commercial photography, extremely high definition, realistic skin texture, natural skin details, premium fashion editorial quality, warm cinematic lighting, soft afternoon window light, subtle highlights and realistic shadows, shallow depth of field, natural bokeh, professional lens rendering, realistic fabric and material textures.
-
-Composition: Vertical 9:16 portrait photograph, full-body framing, subject occupying most of the frame while leaving enough environmental context to communicate the business. Camera approximately at natural eye or slightly below eye level, realistic perspective, no excessive wide-angle distortion. Sharp focus on the woman, with the background naturally softened.
-
-Visual Style: Luxury Brazilian commercial advertising, contemporary lifestyle photography, sophisticated but approachable, natural beauty, authentic Brazilian atmosphere, premium editorial aesthetic, realistic colors and materials.
-
-Negative constraints: No text, no captions, no typography, no watermark, no invented logos, no celebrity resemblance, no distorted anatomy, no extra fingers or limbs, no cropped feet, no cropped head, no unnatural body proportions, no plastic-looking skin, no excessive retouching, no artificial pose, no nudity, no transparent clothing. No gym, athletic wear or fitness studio unless the business is fitness.
-"""
-
-# =============================================================================
-# Fim do bloco editavel — daqui para baixo e montagem automatica
-# =============================================================================
+from app.ai.prompts.platforms import still_aspect
+from app.models.enums import CampaignDestination, ContentFormat
 
 _HARD_SAFETY = (
-    "The person is a fictional adult woman, clearly over 25 years old, "
-    "with the appearance of a woman in her late twenties or thirties. "
-    "Not a lookalike of any real celebrity. Garments stay on."
+    "If a person appears, they must be a fictional adult clearly over 25 years old. "
+    "Not a lookalike of any real celebrity. Fully clothed; garments stay on."
 )
 
 _HARD_NEGATIVE = (
     "child, underage, celebrity lookalike, extra limbs, deformed face, "
-    "text overlay, watermark, gym interior unless fitness business"
+    "text overlay, watermark, logo invention, unreadable labels"
 )
 
-# No comeco: Flux/CLIP leem o inicio. Restage, nao "editar o fundo".
 _REFERENCE_FIDELITY = (
     "PRODUCT FIDELITY: Keep the product from the reference photo identical — "
     "same shape, color, packaging and labels. Do not replace it with an invented "
-    "product. Restage that same product in a new commercial photograph: new scene, "
-    "person and environment from the brief below. This is a restage, not a "
-    "background edit."
+    "product. Restage that same product in a new commercial photograph. This is a "
+    "restage, not a background edit."
 )
+
+_COMMERCIAL_DIRECTION = """
+Hero: the real product is the star of the frame. Show it clearly, honestly and
+desirably. Lighting should sell material, color and texture.
+
+Environment: match architecture, furniture, props and atmosphere to THIS business
+and product. A cafe looks like a cafe; a boutique like a boutique. Do not default
+to a gym, generic studio or stock lifestyle set unless that is this business.
+
+People (optional): only include a person if it helps sell the product in use.
+Any person is a fictional adult over 25, dressed as a real customer of this
+business would dress. Natural pose, realistic anatomy, no celebrity resemblance.
+
+Photography: photorealistic high-end commercial advertising, sharp product focus,
+natural color, premium but approachable Brazilian commercial look.
+
+Negative constraints: no text, captions, typography, watermark or invented logos.
+No distorted anatomy, extra fingers, cropped product, plastic skin or nudity.
+"""
 
 
 def size_for_format(content_format: ContentFormat) -> str:
@@ -89,7 +68,7 @@ def _visual_from_production(production: ProductionResult) -> str:
         value = production.fields.get(key)
         if value:
             bits.append(str(value))
-    for key in ("hook", "visual_direction", "headline", "cover_title", "on_image_text"):
+    for key in ("hook", "visual_direction", "headline", "cover_title", "on_screen_text"):
         value = payload.get(key)
         if value:
             bits.append(str(value))
@@ -111,17 +90,18 @@ def build_still_prompt(
     production: ProductionResult,
     seed: int,
     has_reference: bool = False,
+    destination: CampaignDestination | None = None,
 ) -> ImagePrompt:
     focused = next((item for item in context.products if item.is_focus), None)
     focused_service = next((item for item in context.services if item.is_focus), None)
     offering = focused or focused_service
     location = context.location or "Brazilian small business"
+    dest_label = destination.value.replace("_", " ").title() if destination else "Instagram"
     if offering:
         offering_line = (
             f"Product in frame: '{offering.name}'. "
             f"{offering.description or ''} "
-            "Show the real product/service honestly in her hands or clearly in use; "
-            "do not invent labels or claims."
+            "Show the real product honestly; do not invent labels or claims."
         )
     else:
         offering_line = (
@@ -130,29 +110,33 @@ def build_still_prompt(
         )
 
     scene = _visual_from_production(production)
-    # Flux: CLIP/T5 leem o comeco. Negocio e produto precisam vir primeiro.
     commercial = _join_prompt(
         (
-            f"COMMERCIAL PHOTO: photorealistic advertisement for {context.name}, "
-            f"a {context.segment} in {location}."
+            f"COMMERCIAL PHOTO for {dest_label}: photorealistic advertisement for "
+            f"{context.name}, a {context.segment} in {location}."
         ),
         offering_line,
         f"Scene: {scene}" if scene else "",
         (
-            "The woman, her clothing, the props in her hands and the background "
-            "MUST match this business and product. Do not substitute a gym, "
-            "boutique, studio or generic lifestyle set unless that is this business."
+            "The product, props and background MUST match this business. "
+            "Do not substitute a gym, boutique, studio or generic lifestyle set "
+            "unless that is this business."
         ),
+    )
+    size = (
+        still_aspect(destination, production.content_format)
+        if destination is not None
+        else size_for_format(production.content_format)
     )
     prompt = _join_prompt(
         _REFERENCE_FIDELITY if has_reference else "",
         commercial,
-        CREATIVE_BRIEF.strip(),
+        _COMMERCIAL_DIRECTION.strip(),
         _HARD_SAFETY,
     )
     return ImagePrompt(
         prompt=prompt,
         negative_prompt=" ".join(_HARD_NEGATIVE.split()),
-        size=size_for_format(production.content_format),
+        size=size,
         seed=seed,
     )

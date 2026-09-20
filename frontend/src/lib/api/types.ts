@@ -25,11 +25,13 @@ export type AssetKind =
   | "LOGO"
   | "REFERENCE"
   | "AI_GENERATED"
+  | "VIDEO_GENERATED"
+  | "THUMBNAIL"
   | "OTHER";
 
 export type AssetStatus = "PENDING_UPLOAD" | "READY" | "FAILED";
 
-export type ContentAssetRole = "COVER" | "SLIDE" | "SCENE" | "REFERENCE";
+export type ContentAssetRole = "COVER" | "SLIDE" | "SCENE" | "REFERENCE" | "PRIMARY_VIDEO" | "THUMBNAIL";
 
 export type VersionAuthor = "USER" | "AI" | "SYSTEM";
 
@@ -41,13 +43,17 @@ export type RegenerationScope =
   | "BODY"
   | "CAPTION"
   | "HASHTAGS"
-  | "CTA";
+  | "CTA"
+  | "IMAGE"
+  | "VIDEO";
 
 export type JobKind =
   | "IDEATION"
   | "CONTENT_PRODUCTION"
   | "CONTENT_REGENERATION"
   | "CONTENT_CREATION"
+  | "CAMPAIGN_GENERATION"
+  | "CAMPAIGN_REGENERATION"
   | "ASSET_ANALYSIS";
 
 export type JobStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -185,6 +191,7 @@ export interface AssetRead {
   size_bytes: number | null;
   width: number | null;
   height: number | null;
+  duration_seconds?: number | null;
   title: string | null;
   alt_text: string | null;
   tags: string[];
@@ -234,6 +241,8 @@ export interface ContentRead {
   id: string;
   business_id: string;
   idea_id: string | null;
+  campaign_id?: string | null;
+  product_id?: string | null;
   title: string;
   concept: string | null;
   objective: string | null;
@@ -339,6 +348,8 @@ export interface AICapabilitiesRead {
   supports_vision: boolean;
   image_provider: string;
   image_model: string;
+  video_provider?: string;
+  video_model?: string;
   execution_mode: string;
   taxonomy_version: number;
   default_idea_count: number;
@@ -420,4 +431,61 @@ export interface CalendarRead {
   end: string;
   days: CalendarDay[];
   unscheduled: ContentSummary[];
+}
+
+export type CampaignDestination = "INSTAGRAM" | "TIKTOK" | "TIKTOK_SHOP";
+export type CampaignOutput = "IMAGE" | "VIDEO" | "COPY";
+export type CampaignStatus =
+  | "DRAFT"
+  | "GENERATING"
+  | "REVIEW"
+  | "APPROVED"
+  | "FAILED"
+  | "ARCHIVED";
+
+export interface CampaignRead {
+  id: string;
+  business_id: string;
+  product_id: string;
+  job_id: string | null;
+  destination: CampaignDestination;
+  outputs_requested: CampaignOutput[];
+  failed_outputs: CampaignOutput[];
+  status: CampaignStatus;
+  title: string;
+  brief: Record<string, unknown>;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  product: ProductRead | null;
+  contents: ContentRead[];
+  allowed_transitions: CampaignStatus[];
+}
+
+export interface CampaignSummary {
+  id: string;
+  title: string;
+  destination: CampaignDestination;
+  outputs_requested: CampaignOutput[];
+  failed_outputs: CampaignOutput[];
+  status: CampaignStatus;
+  product_id: string;
+  product_name: string | null;
+  job_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CampaignGenerateAccepted {
+  job_id: string;
+  campaign_id: string;
+  status: JobStatus;
+  kind: JobKind;
+}
+
+export interface DestinationRead {
+  destination: CampaignDestination;
+  label: string;
+  default_outputs: CampaignOutput[];
+  description: string;
 }

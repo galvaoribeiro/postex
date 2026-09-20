@@ -17,6 +17,49 @@ class ContentFormat(str, Enum):
     STORY = "STORY"
 
 
+class CampaignDestination(str, Enum):
+    INSTAGRAM = "INSTAGRAM"
+    TIKTOK = "TIKTOK"
+    TIKTOK_SHOP = "TIKTOK_SHOP"
+
+
+class CampaignOutput(str, Enum):
+    IMAGE = "IMAGE"
+    VIDEO = "VIDEO"
+    COPY = "COPY"
+
+
+class CampaignStatus(str, Enum):
+    DRAFT = "DRAFT"
+    GENERATING = "GENERATING"
+    REVIEW = "REVIEW"
+    APPROVED = "APPROVED"
+    FAILED = "FAILED"
+    ARCHIVED = "ARCHIVED"
+
+
+CAMPAIGN_STATUS_TRANSITIONS: dict[CampaignStatus, frozenset[CampaignStatus]] = {
+    CampaignStatus.DRAFT: frozenset(
+        {CampaignStatus.GENERATING, CampaignStatus.ARCHIVED}
+    ),
+    CampaignStatus.GENERATING: frozenset(
+        {CampaignStatus.REVIEW, CampaignStatus.FAILED, CampaignStatus.ARCHIVED}
+    ),
+    CampaignStatus.REVIEW: frozenset(
+        {
+            CampaignStatus.APPROVED,
+            CampaignStatus.GENERATING,
+            CampaignStatus.ARCHIVED,
+        }
+    ),
+    CampaignStatus.APPROVED: frozenset({CampaignStatus.ARCHIVED, CampaignStatus.REVIEW}),
+    CampaignStatus.FAILED: frozenset(
+        {CampaignStatus.GENERATING, CampaignStatus.ARCHIVED}
+    ),
+    CampaignStatus.ARCHIVED: frozenset({CampaignStatus.REVIEW}),
+}
+
+
 class ContentStatus(str, Enum):
     IDEA = "IDEA"
     DRAFT = "DRAFT"
@@ -88,6 +131,8 @@ class AssetKind(str, Enum):
     LOGO = "LOGO"
     REFERENCE = "REFERENCE"
     AI_GENERATED = "AI_GENERATED"
+    VIDEO_GENERATED = "VIDEO_GENERATED"
+    THUMBNAIL = "THUMBNAIL"
     OTHER = "OTHER"
 
 
@@ -102,6 +147,8 @@ class ContentAssetRole(str, Enum):
     SLIDE = "SLIDE"
     SCENE = "SCENE"
     REFERENCE = "REFERENCE"
+    PRIMARY_VIDEO = "PRIMARY_VIDEO"
+    THUMBNAIL = "THUMBNAIL"
 
 
 class VersionAuthor(str, Enum):
@@ -121,6 +168,8 @@ class RegenerationScope(str, Enum):
     CAPTION = "CAPTION"
     HASHTAGS = "HASHTAGS"
     CTA = "CTA"
+    IMAGE = "IMAGE"
+    VIDEO = "VIDEO"
 
 
 class ContentObjective(str, Enum):
@@ -140,6 +189,8 @@ class JobKind(str, Enum):
     CONTENT_PRODUCTION = "CONTENT_PRODUCTION"
     CONTENT_REGENERATION = "CONTENT_REGENERATION"
     CONTENT_CREATION = "CONTENT_CREATION"
+    CAMPAIGN_GENERATION = "CAMPAIGN_GENERATION"
+    CAMPAIGN_REGENERATION = "CAMPAIGN_REGENERATION"
     ASSET_ANALYSIS = "ASSET_ANALYSIS"
 
 

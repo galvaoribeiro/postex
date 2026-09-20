@@ -38,6 +38,8 @@ from app.models.enums import (
 if TYPE_CHECKING:
     from app.models.asset import Asset
     from app.models.business import Business
+    from app.models.campaign import Campaign
+    from app.models.catalog import Product
 
 
 class ContentIdea(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -106,6 +108,16 @@ class Content(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("content_ideas.id", ondelete="SET NULL"),
         index=True,
     )
+    campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("campaigns.id", ondelete="SET NULL"),
+        index=True,
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("products.id", ondelete="SET NULL"),
+        index=True,
+    )
 
     title: Mapped[str] = mapped_column(String(240), nullable=False)
     concept: Mapped[str | None] = mapped_column(Text)
@@ -138,6 +150,8 @@ class Content(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     business: Mapped["Business"] = relationship(back_populates="contents")
     idea: Mapped["ContentIdea | None"] = relationship(back_populates="contents")
+    campaign: Mapped["Campaign | None"] = relationship(back_populates="contents")
+    product: Mapped["Product | None"] = relationship()
     versions: Mapped[list["ContentVersion"]] = relationship(
         back_populates="content",
         cascade="all, delete-orphan",

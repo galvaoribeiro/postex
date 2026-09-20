@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Home, Notebook, Settings, Sparkles } from "lucide-react";
+import { Home, Notebook, Settings, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,8 +9,7 @@ import { cn } from "@/lib/utils";
 export const NAV_ITEMS = [
   { href: "/inicio", label: "Inicio", icon: Home },
   { href: "/criar", label: "Criar", icon: Sparkles },
-  { href: "/contents", label: "Conteudos", icon: Notebook },
-  { href: "/calendar", label: "Calendario", icon: CalendarDays },
+  { href: "/contents", label: "Campanhas", icon: Notebook },
 ];
 
 export function Sidebar() {
@@ -23,8 +22,8 @@ export function Sidebar() {
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm font-semibold leading-tight text-foreground">Motor de</p>
-          <p className="text-sm font-semibold leading-tight text-brand-600">Conteudo</p>
+          <p className="text-sm font-semibold leading-tight text-foreground">POSTEX</p>
+          <p className="text-xs font-medium leading-tight text-brand-600">conteudo que vende</p>
         </div>
       </div>
 

@@ -14,8 +14,9 @@ import uuid
 from datetime import date
 from typing import Any
 
-from app.ai.content_engine import ContentEngine
+from app.ai.content_engine import ContentEngine, ProductionResult
 from app.ai.context_builder import ContextBuilder
+from app.ai.prompts.platforms import production_extra
 from app.ai.registry import get_ai_provider
 from app.ai.taxonomy import pick_pillar_for_objective
 from app.ai.types import ImageRef
@@ -25,6 +26,8 @@ from app.core.logging import get_logger
 from app.models.business import Business
 from app.models.enums import (
     TERMINAL_JOB_STATUSES,
+    CampaignDestination,
+    CampaignOutput,
     ContentFormat,
     ContentObjective,
     JobKind,
@@ -32,11 +35,15 @@ from app.models.enums import (
 )
 from app.repositories.business import BusinessRepository
 from app.services.asset_service import AssetService
+from app.services.campaign_policy import content_format_for, wants
+from app.services.campaign_service import CampaignService
 from app.services.content_service import ContentService
+from app.services.creation_questions import destination_instruction
 from app.services.idea_service import IdeaService
 from app.services.job_service import JobService
 from app.services.still_service import StillService
 from app.services.storage_service import get_storage_service
+from app.services.video_service import VideoService
 
 logger = get_logger(__name__)
 
@@ -99,7 +106,16 @@ async def _complete(job_id: uuid.UUID, result: dict[str, Any]) -> None:
 async def _fail(job_id: uuid.UUID, message: str, details: dict[str, Any] | None = None) -> None:
     async with session_scope() as session:
         jobs = JobService(session)
-        await jobs.fail(await jobs.get_unscoped(job_id), message, details=details)
+        job = await jobs.get_unscoped(job_id)
+        await jobs.fail(job, message, details=details)
+        campaign_id = (job.payload or {}).get("campaign_id")
+        if campaign_id:
+            campaigns = CampaignService(session)
+            try:
+                campaign = await campaigns.get(job.business_id, uuid.UUID(str(campaign_id)))
+            except NotFoundError:
+                return
+            await campaigns.mark_failed(campaign, message)
 
 
 # ----------------------------------------------------------------- handlers --
@@ -117,6 +133,8 @@ async def _run_handler(
         JobKind.CONTENT_REGENERATION: _handle_regeneration,
         JobKind.ASSET_ANALYSIS: _handle_asset_analysis,
         JobKind.CONTENT_CREATION: _handle_content_creation,
+        JobKind.CAMPAIGN_GENERATION: _handle_campaign_generation,
+        JobKind.CAMPAIGN_REGENERATION: _handle_campaign_regeneration,
     }
     handler = handlers[kind]
 
@@ -331,3 +349,226 @@ async def _handle_content_creation(
         "image": still_meta.get("image"),
         "provider": production.provider_metadata,
     }
+
+
+async def _handle_campaign_generation(
+    session: Any, business: Business, job_id: uuid.UUID, payload: dict[str, Any]
+) -> dict[str, Any]:
+    campaigns = CampaignService(session)
+    campaign = await campaigns.get(business.id, uuid.UUID(payload["campaign_id"]))
+    product_id = uuid.UUID(payload["product_id"])
+    destination = CampaignDestination(payload["destination"])
+    outputs = [CampaignOutput(item) for item in payload.get("outputs") or []]
+    instruction = payload.get("instruction") or destination_instruction(destination)
+    if production_extra(destination) not in (instruction or ""):
+        instruction = f"{production_extra(destination)}\n{instruction}"
+
+    provider = get_ai_provider()
+    context = await ContextBuilder(session).build(
+        business,
+        include_image_urls=provider.supports_vision,
+        focus_product_id=product_id,
+    )
+    engine = ContentEngine(provider)
+    content_format = content_format_for(destination, outputs)
+    pillar = pick_pillar_for_objective(
+        ContentObjective.SELL,
+        seed=int(job_id.int % 1_000_000),
+        service_focused=False,
+    )
+    stages: list[str] = []
+    failed: list[str] = []
+    image_meta: dict[str, object] | None = None
+    video_meta: dict[str, object] | None = None
+
+    async def mark(stage: str, progress: int) -> None:
+        stages.append(stage)
+        await JobService.set_stage(job_id, stage, progress)
+
+    await mark("analise", 18)
+    await mark("copy", 40)
+    ideation = await engine.generate_ideas(
+        context,
+        count=1,
+        categories=[pillar],
+        format_hint=content_format,
+        extra_instruction=instruction,
+        seed=int(job_id.int % 1_000_000),
+    )
+    idea_service = IdeaService(session)
+    idea = (await idea_service.persist_batch(business.id, ideation, job_id=job_id))[0]
+    production = await engine.produce(
+        context,
+        IdeaService.to_engine_input(idea),
+        content_format=content_format,
+        instruction=instruction,
+        seed=int(job_id.int % 1_000_000),
+    )
+    content = await ContentService(session).create_from_production(
+        business_id=business.id,
+        result=production,
+        idea_id=idea.id,
+        campaign_id=campaign.id,
+        product_id=product_id,
+    )
+
+    if wants(outputs, CampaignOutput.IMAGE):
+        await mark("imagem", 68)
+        try:
+            _asset, still_meta = await StillService(session).attach_cover(
+                business=business,
+                content=content,
+                context=context,
+                production=production,
+                seed=int(job_id.int % 1_000_000),
+                product_id=product_id,
+                destination=destination,
+            )
+            image_meta = still_meta.get("image") if isinstance(still_meta, dict) else still_meta
+        except Exception as exc:  # noqa: BLE001 - falha parcial da saida
+            logger.warning("campaign_image_failed", campaign_id=str(campaign.id), error=str(exc))
+            failed.append(CampaignOutput.IMAGE.value)
+
+    if wants(outputs, CampaignOutput.VIDEO):
+        await mark("video", 84)
+        try:
+            _asset, video_blob = await VideoService(session).attach_video(
+                business=business,
+                content=content,
+                context=context,
+                production=production,
+                seed=int(job_id.int % 1_000_000),
+                destination=destination,
+                product_id=product_id,
+            )
+            video_meta = video_blob.get("video") if isinstance(video_blob, dict) else video_blob
+        except Exception as exc:  # noqa: BLE001 - falha parcial da saida
+            logger.warning("campaign_video_failed", campaign_id=str(campaign.id), error=str(exc))
+            failed.append(CampaignOutput.VIDEO.value)
+
+    await mark("finalizando", 94)
+    await idea_service.mark_used(idea)
+    await campaigns.mark_review(
+        campaign,
+        title=content.title,
+        failed_outputs=failed,
+        generation_context={
+            "destination": destination.value,
+            "outputs": [item.value for item in outputs],
+            "provider": production.provider_metadata,
+        },
+    )
+    return {
+        "campaign_id": str(campaign.id),
+        "content_id": str(content.id),
+        "idea_id": str(idea.id),
+        "format": content.format.value,
+        "title": content.title,
+        "stages": stages,
+        "image": image_meta,
+        "video": video_meta,
+        "failed_outputs": failed,
+        "provider": production.provider_metadata,
+    }
+
+
+def _production_from_content(content: Any) -> ProductionResult:
+    return ProductionResult(
+        content_format=content.format,
+        fields={
+            "title": content.title,
+            "concept": content.concept,
+            "objective": content.objective,
+            "caption": content.caption,
+            "cta": content.cta,
+            "hashtags": list(content.hashtags or []),
+            "payload": dict(content.payload or {}),
+        },
+        context_snapshot=dict((content.generation_context or {}).get("context") or {}),
+    )
+
+
+async def _handle_campaign_regeneration(
+    session: Any, business: Business, job_id: uuid.UUID, payload: dict[str, Any]
+) -> dict[str, Any]:
+    campaigns = CampaignService(session)
+    campaign = await campaigns.get(business.id, uuid.UUID(payload["campaign_id"]))
+    if not campaign.contents:
+        raise NotFoundError("Campanha sem peca para regenerar.")
+    content = campaign.contents[0]
+    content = await ContentService(session).get(business.id, content.id)
+    output = CampaignOutput(payload["output"])
+    instruction = payload.get("instruction")
+    destination = campaign.destination
+    product_id = campaign.product_id
+    stages: list[str] = []
+
+    async def mark(stage: str, progress: int) -> None:
+        stages.append(stage)
+        await JobService.set_stage(job_id, stage, progress)
+
+    provider = get_ai_provider()
+    context = await ContextBuilder(session).build(
+        business,
+        include_image_urls=provider.supports_vision,
+        focus_product_id=product_id,
+    )
+    dest_instruction = destination_instruction(destination)
+    extra = instruction.strip() if instruction else ""
+    combined = f"{dest_instruction} {extra}".strip()
+    result_blob: dict[str, Any] = {"campaign_id": str(campaign.id), "content_id": str(content.id)}
+
+    if output is CampaignOutput.COPY:
+        await mark("copy", 50)
+        engine = ContentEngine(provider)
+        regenerated = await engine.regenerate(
+            context,
+            ContentService.to_engine_snapshot(content),
+            scope=RegenerationScope.FULL,
+            instruction=combined,
+            seed=int(job_id.int % 1_000_000),
+        )
+        await ContentService(session).apply_regeneration(
+            content, regenerated, instruction=combined
+        )
+        result_blob["provider"] = regenerated.provider_metadata
+    elif output is CampaignOutput.IMAGE:
+        await mark("imagem", 60)
+        production = _production_from_content(content)
+        _asset, still_meta = await StillService(session).attach_cover(
+            business=business,
+            content=content,
+            context=context,
+            production=production,
+            seed=int(job_id.int % 1_000_000),
+            product_id=product_id,
+            destination=destination,
+            replace_existing=True,
+        )
+        result_blob["image"] = still_meta.get("image")
+    else:
+        await mark("video", 60)
+        production = _production_from_content(content)
+        _asset, video_blob = await VideoService(session).attach_video(
+            business=business,
+            content=content,
+            context=context,
+            production=production,
+            seed=int(job_id.int % 1_000_000),
+            destination=destination,
+            product_id=product_id,
+            replace_existing=True,
+        )
+        result_blob["video"] = video_blob.get("video")
+
+    await mark("finalizando", 92)
+    failed = [item for item in (campaign.failed_outputs or []) if item != output.value]
+    await campaigns.mark_review(
+        campaign,
+        title=content.title,
+        failed_outputs=failed,
+        generation_context=dict(campaign.generation_context or {}),
+    )
+    result_blob["stages"] = stages
+    result_blob["output"] = output.value
+    return result_blob

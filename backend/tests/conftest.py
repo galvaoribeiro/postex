@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ["AI_PROVIDER"] = "mock"
 os.environ["IMAGE_PROVIDER"] = "mock"
+os.environ["VIDEO_PROVIDER"] = "mock"
 os.environ["AI_EXECUTION_MODE"] = "inline"
 os.environ.setdefault("SECRET_KEY", "chave-de-teste-com-mais-de-32-caracteres-aqui")
 

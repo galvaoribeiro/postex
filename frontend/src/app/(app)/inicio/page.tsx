@@ -1,147 +1,116 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Store, Tag } from "lucide-react";
+import { Plus, Tag } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { ContentSummaryItem } from "@/components/domain/content-summary-item";
-import { FORMAT_META } from "@/components/domain/format-badge";
+import { DestinationBadge } from "@/components/domain/destination-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { PageSpinner } from "@/components/ui/spinner";
+import { campaignsApi } from "@/lib/api/campaigns";
 import { dashboardApi } from "@/lib/api/dashboard";
-import type { ContentObjective, QuickCreateItem } from "@/lib/api/types";
+import type { CampaignDestination, CampaignSummary, QuickCreateItem } from "@/lib/api/types";
 import { queryKeys } from "@/lib/query-keys";
-import { addDays, cn, formatCurrency, startOfWeekMonday, toIsoDate } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
-const OBJECTIVES: { value: ContentObjective; label: string; description: string }[] = [
-  { value: "SELL", label: "Vender", description: "Convencer a pessoa a comprar." },
-  { value: "ATTRACT", label: "Atrair clientes", description: "Trazer gente nova para o perfil." },
-  { value: "BRAND", label: "Fortalecer a marca", description: "Mostrar quem voce e." },
+const DESTINATIONS: { value: CampaignDestination; label: string; description: string }[] = [
+  { value: "INSTAGRAM", label: "Instagram", description: "Imagem + copy para o feed." },
+  { value: "TIKTOK", label: "TikTok", description: "Video vertical + roteiro." },
+  { value: "TIKTOK_SHOP", label: "TikTok Shop", description: "Video comercial com CTA de compra." },
 ];
-
-const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
 
 export default function InicioPage() {
   const router = useRouter();
-  const today = new Date();
-  const weekStart = startOfWeekMonday(today);
-  const weekEnd = addDays(weekStart, 6);
-
   const [item, setItem] = useState<QuickCreateItem | null>(null);
-  const [objective, setObjective] = useState<ContentObjective | null>(null);
+  const [destination, setDestination] = useState<CampaignDestination | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: queryKeys.dashboard,
     queryFn: dashboardApi.get,
     refetchInterval: 30_000,
   });
-
-  const months = [
-    { year: weekStart.getFullYear(), month: weekStart.getMonth() + 1 },
-    { year: weekEnd.getFullYear(), month: weekEnd.getMonth() + 1 },
-  ].filter(
-    (value, index, list) =>
-      list.findIndex((entry) => entry.year === value.year && entry.month === value.month) === index
-  );
-
-  const weekQuery = useQuery({
-    queryKey: queryKeys.calendar(weekStart.getFullYear(), weekStart.getMonth() + 1),
-    queryFn: () => dashboardApi.calendar(weekStart.getFullYear(), weekStart.getMonth() + 1),
-  });
-  const extraMonth = months[1];
-  const extraQuery = useQuery({
-    queryKey: extraMonth
-      ? queryKeys.calendar(extraMonth.year, extraMonth.month)
-      : ["calendar", "skip"],
-    queryFn: () => dashboardApi.calendar(extraMonth!.year, extraMonth!.month),
-    enabled: Boolean(extraMonth),
+  const campaignsQuery = useQuery({
+    queryKey: queryKeys.campaigns({ status: ["REVIEW", "GENERATING"] }),
+    queryFn: () => campaignsApi.list({ status: ["REVIEW", "GENERATING"], limit: 8 }),
   });
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return <PageSpinner label="Carregando..." />;
   }
 
-  const daysByDate = new Map(
-    [...(weekQuery.data?.days ?? []), ...(extraQuery.data?.days ?? [])].map((day) => [
-      day.day,
-      day.contents,
-    ])
-  );
-
-  function selectItem(next: QuickCreateItem) {
-    setItem(next);
+  if (isError || !data) {
+    return (
+      <div className="flex min-h-64 flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-sm text-foreground/70">
+          Nao foi possivel carregar o inicio. Confira a API e tente de novo.
+        </p>
+        <Button onClick={() => void refetch()} loading={isFetching}>
+          Tentar novamente
+        </Button>
+      </div>
+    );
   }
 
   function handleCreate() {
     if (!item) {
-      toast.error("Escolha um produto ou cadastre um novo em Criar.");
+      toast.error("Escolha um produto ou cadastre um novo.");
       return;
     }
-    if (!objective) {
-      toast.error("Escolha um objetivo.");
+    if (!destination) {
+      toast.error("Escolha onde publicar.");
       return;
     }
-    const params = new URLSearchParams({ objective });
-    params.set(item.kind === "product" ? "product" : "service", item.id);
+    const params = new URLSearchParams({ destination, product: item.id });
     router.push(`/criar?${params.toString()}`);
   }
 
-  const waiting = data.in_review;
+  const waiting = campaignsQuery.data?.items ?? [];
 
   return (
     <div className="space-y-8">
       <PageHeader
         title={`Ola, ${data.business_name}`}
-        description="Escolha o produto e o objetivo. O cadastro de um produto novo acontece em Criar."
+        description="Transforme um produto em conteudo que vende. Sem precisar saber o que postar."
       />
 
       <section>
-        <h2 className="text-sm font-semibold text-foreground">Qual produto vamos divulgar?</h2>
+        <h2 className="text-sm font-semibold text-foreground">Qual produto vamos vender?</h2>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Chip
-            active={false}
-            icon={<Plus className="h-3.5 w-3.5" />}
-            onClick={() => router.push("/criar")}
-          >
+          <Chip active={false} icon={<Plus className="h-3.5 w-3.5" />} onClick={() => router.push("/criar")}>
             Novo produto
           </Chip>
-          {(data.quick_create ?? []).map((entry) => (
-            <Chip
-              key={entry.id}
-              active={item?.id === entry.id}
-              icon={
-                entry.kind === "product" ? (
-                  <Tag className="h-3.5 w-3.5" />
-                ) : (
-                  <Store className="h-3.5 w-3.5" />
-                )
-              }
-              onClick={() => selectItem(entry)}
-            >
-              {entry.name}
-              {entry.price != null ? ` · ${formatCurrency(entry.price)}` : ""}
-            </Chip>
-          ))}
+          {(data.quick_create ?? [])
+            .filter((entry) => entry.kind === "product")
+            .map((entry) => (
+              <Chip
+                key={entry.id}
+                active={item?.id === entry.id}
+                icon={<Tag className="h-3.5 w-3.5" />}
+                onClick={() => setItem(entry)}
+              >
+                {entry.name}
+                {entry.price != null ? ` · ${formatCurrency(entry.price)}` : ""}
+              </Chip>
+            ))}
         </div>
         {(data.quick_create ?? []).length === 0 && (
           <p className="mt-3 text-sm text-foreground/45">
-            Ainda nao ha produto cadastrado. Use Novo produto para comecar em Criar.
+            Ainda nao ha produto cadastrado. Use Novo produto para comecar.
           </p>
         )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          {OBJECTIVES.map((entry) => (
+          {DESTINATIONS.map((entry) => (
             <button
               key={entry.value}
               type="button"
-              onClick={() => setObjective(entry.value)}
+              onClick={() => setDestination(entry.value)}
               className={cn(
                 "rounded-2xl border px-4 py-4 text-left transition-colors",
-                objective === entry.value
+                destination === entry.value
                   ? "border-brand-500 bg-brand-50"
                   : "border-border-subtle bg-surface hover:border-brand-200"
               )}
@@ -153,66 +122,39 @@ export default function InicioPage() {
         </div>
 
         <Button className="mt-4" size="lg" onClick={handleCreate}>
-          Criar conteudo
+          Gerar campanha
         </Button>
       </section>
 
       <section>
         <h2 className="text-sm font-semibold text-foreground">Esperando voce</h2>
-        <p className="mt-1 text-sm text-foreground/55">Abra o preview. Aprovar nao e as cegas.</p>
+        <p className="mt-1 text-sm text-foreground/55">Revise, exporte e publique onde quiser.</p>
         <div className="mt-3 space-y-2">
           {waiting.length === 0 ? (
             <p className="rounded-xl bg-surface-muted px-4 py-6 text-center text-sm text-foreground/45">
-              Nada esperando revisao. Crie o proximo post.
+              Nenhuma campanha aguardando. Gere a proxima.
             </p>
           ) : (
-            waiting.map((content) => <ContentSummaryItem key={content.id} content={content} />)
+            waiting.map((campaign) => <CampaignRow key={campaign.id} campaign={campaign} />)
           )}
         </div>
       </section>
-
-      <section>
-        <h2 className="text-sm font-semibold text-foreground">Esta semana</h2>
-        <div className="mt-3 grid grid-cols-7 gap-1">
-          {WEEKDAYS.map((label, index) => {
-            const date = addDays(weekStart, index);
-            const key = toIsoDate(date);
-            const contents = daysByDate.get(key) ?? [];
-            const isToday = key === toIsoDate(today);
-            return (
-              <Card
-                key={key}
-                className={cn("min-h-[88px]", isToday && "border-brand-400 bg-brand-50/40")}
-              >
-                <CardContent className="p-2">
-                  <p className="text-[11px] font-medium text-foreground/45">{label}</p>
-                  <p className={cn("text-sm font-semibold", isToday && "text-brand-700")}>
-                    {date.getDate()}
-                  </p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {contents.map((content) => {
-                      const Icon = FORMAT_META[content.format].icon;
-                      return (
-                        <span
-                          key={content.id}
-                          title={content.title}
-                          className={cn(
-                            "inline-flex h-6 w-6 items-center justify-center rounded-md",
-                            FORMAT_META[content.format].className
-                          )}
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                        </span>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </section>
     </div>
+  );
+}
+
+function CampaignRow({ campaign }: { campaign: CampaignSummary }) {
+  return (
+    <a
+      href={`/contents/${campaign.id}`}
+      className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface px-4 py-3 transition-colors hover:border-brand-200 hover:bg-brand-50/40"
+    >
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-foreground">{campaign.title}</p>
+        <p className="mt-1 text-xs text-foreground/50">{campaign.product_name}</p>
+      </div>
+      <DestinationBadge destination={campaign.destination} />
+    </a>
   );
 }
 

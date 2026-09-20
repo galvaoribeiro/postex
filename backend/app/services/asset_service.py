@@ -167,13 +167,15 @@ class AssetService:
         alt_text: str | None = None,
         width: int | None = None,
         height: int | None = None,
+        duration_seconds: int | None = None,
         product_id: uuid.UUID | None = None,
         service_id: uuid.UUID | None = None,
         tags: list[str] | None = None,
     ) -> Asset:
-        """Persiste um still gerado no backend: sobe o binario e marca READY."""
+        """Persiste um still ou video gerado no backend: sobe o binario e marca READY."""
+        media = "video" if mime_type.startswith("video/") else "image"
         mime = self.storage.validate_upload(
-            filename=filename, mime_type=mime_type, size_bytes=len(data)
+            filename=filename, mime_type=mime_type, size_bytes=len(data), media=media
         )
         await self._validate_links(business_id, product_id, service_id)
         storage_key = self.storage.build_key(business_id, filename)
@@ -191,6 +193,7 @@ class AssetService:
                 size_bytes=len(data),
                 width=width,
                 height=height,
+                duration_seconds=duration_seconds,
                 title=title,
                 alt_text=alt_text,
                 tags=tags or [],

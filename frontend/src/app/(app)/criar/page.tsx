@@ -1,40 +1,39 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Calendar,
-  Check,
-  ImagePlus,
-  Plus,
-  RefreshCw,
-  Store,
-  Tag,
-} from "lucide-react";
+import { ArrowLeft, Check, Download, ImagePlus, Plus, RefreshCw, Tag } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { toast } from "sonner";
 
-import { ContentPreview, StageChecklist } from "@/components/domain/content-preview";
+import { CampaignPreview, StageChecklist } from "@/components/domain/campaign-preview";
+import { DESTINATION_META } from "@/components/domain/destination-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Progress } from "@/components/ui/progress";
 import { assetsApi, uploadLinkedImage } from "@/lib/api/assets";
-import { productsApi, servicesApi } from "@/lib/api/catalog";
+import { campaignsApi } from "@/lib/api/campaigns";
+import { productsApi } from "@/lib/api/catalog";
 import { ApiError } from "@/lib/api/client";
-import { contentsApi } from "@/lib/api/contents";
 import type {
   AssetRead,
-  ContentObjective,
-  ContentRead,
+  CampaignDestination,
+  CampaignOutput,
+  CampaignRead,
   CreationQuestion,
   JobRead,
   ProductRead,
-  ServiceRead,
 } from "@/lib/api/types";
 import { useJobWatcher } from "@/lib/hooks/use-job-watcher";
 import { queryKeys } from "@/lib/query-keys";
@@ -42,30 +41,34 @@ import { cn, formatCurrency } from "@/lib/utils";
 
 type Step = "choice" | "questions" | "generating" | "preview";
 
-const OBJECTIVES: {
-  value: ContentObjective;
+const DESTINATIONS: {
+  value: CampaignDestination;
   label: string;
   description: string;
+  defaults: CampaignOutput[];
 }[] = [
   {
-    value: "SELL",
-    label: "Vender",
-    description: "Mostrar um produto ou servico e convencer a pessoa a comprar.",
+    value: "INSTAGRAM",
+    label: "Instagram",
+    description: "Imagem comercial e copy prontas para o feed.",
+    defaults: ["IMAGE", "COPY"],
   },
   {
-    value: "ATTRACT",
-    label: "Atrair clientes",
-    description: "Trazer gente nova para o perfil, sem pedir a compra agora.",
+    value: "TIKTOK",
+    label: "TikTok",
+    description: "Video vertical, roteiro e legenda nativos.",
+    defaults: ["VIDEO", "COPY"],
   },
   {
-    value: "BRAND",
-    label: "Fortalecer a marca",
-    description: "Mostrar quem voce e e por que confiar no seu negocio.",
+    value: "TIKTOK_SHOP",
+    label: "TikTok Shop",
+    description: "Video comercial com produto visivel e CTA de compra.",
+    defaults: ["VIDEO", "COPY"],
   },
 ];
 
-function parseObjective(value: string | null): ContentObjective | null {
-  if (value === "SELL" || value === "ATTRACT" || value === "BRAND") return value;
+function parseDestination(value: string | null): CampaignDestination | null {
+  if (value === "INSTAGRAM" || value === "TIKTOK" || value === "TIKTOK_SHOP") return value;
   return null;
 }
 
@@ -87,23 +90,17 @@ function CriarFlow() {
     queryKey: queryKeys.products,
     queryFn: () => productsApi.list(true),
   });
-  const { data: services } = useQuery({
-    queryKey: queryKeys.services,
-    queryFn: () => servicesApi.list(true),
-  });
   const { data: catalogAssets, isSuccess: assetsReady } = useQuery({
     queryKey: queryKeys.assets({ status: "READY" }),
     queryFn: () => assetsApi.list({ status: "READY" }),
   });
 
   const [step, setStep] = useState<Step>("choice");
-  const [objective, setObjective] = useState<ContentObjective | null>(() =>
-    parseObjective(searchParams.get("objective"))
+  const [destination, setDestination] = useState<CampaignDestination | null>(() =>
+    parseDestination(searchParams.get("destination"))
   );
+  const [outputs, setOutputs] = useState<CampaignOutput[]>(["IMAGE", "COPY"]);
   const [productId, setProductId] = useState<string | null>(() => searchParams.get("product"));
-  const [serviceId, setServiceId] = useState<string | null>(() =>
-    searchParams.get("product") ? null : searchParams.get("service")
-  );
   const [questions, setQuestions] = useState<CreationQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -116,77 +113,61 @@ function CriarFlow() {
   const [stage, setStage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [jobStatus, setJobStatus] = useState<JobRead["status"]>("PENDING");
-  const [content, setContent] = useState<ContentRead | null>(null);
+  const [campaign, setCampaign] = useState<CampaignRead | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [stayOnChoice, setStayOnChoice] = useState(false);
+  const [regenerating, setRegenerating] = useState<CampaignOutput | null>(null);
 
   const lastRequest = useRef<{
-    objective: ContentObjective;
-    productId: string | null;
-    serviceId: string | null;
+    destination: CampaignDestination;
+    productId: string;
+    outputs: CampaignOutput[];
     answers: Record<string, string>;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const catalogReady = products !== undefined && services !== undefined && assetsReady;
+  const catalogReady = products !== undefined && assetsReady;
   const resolvedProductId =
     productId && products && !products.some((item) => item.id === productId) ? null : productId;
-  const resolvedServiceId =
-    serviceId && services && !services.some((item) => item.id === serviceId) ? null : serviceId;
-  const selectedHasPhoto = itemHasReadyImage(
-    catalogAssets,
-    resolvedProductId,
-    resolvedServiceId
-  );
-
+  const selectedHasPhoto = itemHasReadyImage(catalogAssets, resolvedProductId);
   const currentQuestion = questions[questionIndex] ?? null;
   const selectedProduct = products?.find((item) => item.id === resolvedProductId) ?? null;
-  const selectedService = services?.find((item) => item.id === resolvedServiceId) ?? null;
 
-  const urlObjective = parseObjective(searchParams.get("objective"));
+  const urlDestination = parseDestination(searchParams.get("destination"));
   const matchesInboundQuery =
-    Boolean(urlObjective) &&
-    objective === urlObjective &&
-    (searchParams.get("product") ? resolvedProductId === searchParams.get("product") : true) &&
-    (searchParams.get("service") && !searchParams.get("product")
-      ? resolvedServiceId === searchParams.get("service")
-      : true);
+    Boolean(urlDestination) &&
+    destination === urlDestination &&
+    (searchParams.get("product") ? resolvedProductId === searchParams.get("product") : true);
   const bootReady =
     matchesInboundQuery &&
     !stayOnChoice &&
     catalogReady &&
-    Boolean(objective) &&
-    Boolean(resolvedProductId || resolvedServiceId) &&
+    Boolean(destination) &&
+    Boolean(resolvedProductId) &&
     selectedHasPhoto;
 
   const bootQuestions = useQuery({
-    queryKey: queryKeys.creationQuestions({
-      objective,
+    queryKey: queryKeys.campaignQuestions({
+      destination,
       product_id: resolvedProductId,
-      service_id: resolvedServiceId,
     }),
     queryFn: () =>
-      contentsApi.generateQuestions({
-        objective: objective!,
-        product_id: resolvedProductId || undefined,
-        service_id: resolvedServiceId || undefined,
+      campaignsApi.generateQuestions({
+        product_id: resolvedProductId!,
+        destination: destination!,
       }),
     enabled: bootReady && step === "choice",
   });
 
   const skipToQuestions =
-    !stayOnChoice &&
-    step === "choice" &&
-    bootQuestions.isSuccess &&
-    bootQuestions.data.length > 0;
+    !stayOnChoice && step === "choice" && bootQuestions.isSuccess && bootQuestions.data.length > 0;
 
-  const generateContent = useCallback(
+  const generateCampaign = useCallback(
     async (payload: {
-      objective: ContentObjective;
-      productId: string | null;
-      serviceId: string | null;
+      destination: CampaignDestination;
+      productId: string;
+      outputs: CampaignOutput[];
       answers: Record<string, string>;
     }) => {
       lastRequest.current = payload;
@@ -195,154 +176,123 @@ function CriarFlow() {
       setStage(null);
       setProgress(10);
       setJobStatus("PROCESSING");
-      setContent(null);
+      setCampaign(null);
       try {
-        const accepted = await contentsApi.generate({
-          objective: payload.objective,
-          product_id: payload.productId || undefined,
-          service_id: payload.serviceId || undefined,
+        const accepted = await campaignsApi.generate({
+          product_id: payload.productId,
+          destination: payload.destination,
+          outputs: payload.outputs,
           answers: payload.answers,
         });
         const job = await watch(accepted.job_id, accepted.kind, {
           showToast: false,
-          intervalMs: 800,
-          onStage: (nextStage) => setStage(nextStage),
+          timeoutMs: 180_000,
+          onStage: (next, current) => {
+            setStage(next);
+            setProgress(current.progress);
+            setJobStatus(current.status);
+          },
           onUpdate: (current) => {
             setProgress(current.progress);
             setJobStatus(current.status);
-            if (current.stage) setStage(current.stage);
           },
         });
-        const contentId = job?.result?.content_id as string | undefined;
-        if (!job || job.status !== "COMPLETED" || !contentId) {
-          setError(job?.error_message ?? "Nao foi possivel gerar o conteudo.");
+        if (!job || job.status !== "COMPLETED") {
+          setError(job?.error_message ?? "Nao foi possivel gerar a campanha.");
           return;
         }
-        const created = await contentsApi.get(contentId);
-        queryClient.invalidateQueries({ queryKey: ["contents"] });
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
-        queryClient.invalidateQueries({ queryKey: queryKeys.products });
-        queryClient.invalidateQueries({ queryKey: queryKeys.services });
-        queryClient.invalidateQueries({ queryKey: queryKeys.business });
-        queryClient.invalidateQueries({ queryKey: ["assets"] });
-        setContent(created);
-        setProgress(100);
-        setJobStatus("COMPLETED");
+        const created = await campaignsApi.get(accepted.campaign_id);
+        setCampaign(created);
         setStep("preview");
+        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns() });
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Falha ao gerar o conteudo.");
+        setError(err instanceof ApiError ? err.message : "Nao foi possivel gerar a campanha.");
       }
     },
     [queryClient, watch]
   );
 
-  const begin = useCallback(
-    async (
-      nextObjective: ContentObjective,
-      nextProductId: string | null,
-      nextServiceId: string | null
-    ) => {
-      setBusy(true);
-      setError(null);
-      try {
-        const list = await queryClient.fetchQuery({
-          queryKey: queryKeys.creationQuestions({
-            objective: nextObjective,
-            product_id: nextProductId,
-            service_id: nextServiceId,
-          }),
-          queryFn: () =>
-            contentsApi.generateQuestions({
-              objective: nextObjective,
-              product_id: nextProductId || undefined,
-              service_id: nextServiceId || undefined,
-            }),
-        });
-        if (list.length === 0) {
-          await generateContent({
-            objective: nextObjective,
-            productId: nextProductId,
-            serviceId: nextServiceId,
-            answers: {},
-          });
-          return;
-        }
-        setQuestions(list);
-        setQuestionIndex(0);
-        setAnswers({});
-        setDraftAnswer("");
-        setPhotoFile(null);
-        setStep("questions");
-      } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : "Nao foi possivel preparar as perguntas.");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [generateContent, queryClient]
-  );
-
-  function selectProduct(id: string) {
-    setCreatingProduct(false);
-    setProductId(id);
-    setServiceId(null);
-    setPhotoFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  async function ensurePhoto(targetProductId: string) {
+    if (itemHasReadyImage(catalogAssets, targetProductId) || !photoFile) return;
+    await uploadLinkedImage(photoFile, { productId: targetProductId, kind: "PRODUCT_PHOTO" });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.assets() });
   }
 
-  function selectService(id: string) {
-    setCreatingProduct(false);
-    setServiceId(id);
-    setProductId(null);
-    setPhotoFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  async function finishQuestions(nextAnswers: Record<string, string>) {
+    if (!destination || !resolvedProductId) return;
+    await ensurePhoto(resolvedProductId);
+    await generateCampaign({
+      destination,
+      productId: resolvedProductId,
+      outputs,
+      answers: nextAnswers,
+    });
   }
 
-  function startCreateProduct() {
-    setCreatingProduct(true);
-    setProductId(null);
-    setServiceId(null);
-    setPhotoFile(null);
-    setNewProductName("");
-    setNewProductPrice("");
-    setNewProductPhoto(null);
-  }
-
-  async function handleCreateProduct() {
-    const name = newProductName.trim();
-    if (name.length < 2) {
-      toast.error("Informe o nome do produto.");
+  async function handleContinueChoice() {
+    if (!destination || !resolvedProductId) {
+      toast.error("Escolha o produto e o destino.");
       return;
     }
-    if (!newProductPhoto) {
-      toast.error("Anexe a foto do produto. Ela entra na capa gerada.");
+    if (!selectedHasPhoto && !photoFile) {
+      toast.error("Anexe uma foto do produto.");
       return;
     }
     setBusy(true);
     try {
-      const priceRaw = newProductPrice.trim().replace(",", ".");
-      const created = await productsApi.create({
-        name,
-        price: priceRaw && !Number.isNaN(Number(priceRaw)) ? Number(priceRaw) : null,
-        currency: "BRL",
-        highlights: [],
-        is_active: true,
+      await ensurePhoto(resolvedProductId);
+      const nextQuestions = await campaignsApi.generateQuestions({
+        product_id: resolvedProductId,
+        destination,
       });
-      await uploadLinkedImage(newProductPhoto, {
-        kind: "PRODUCT_PHOTO",
-        productId: created.id,
+      if (nextQuestions.length === 0) {
+        await finishQuestions({});
+        return;
+      }
+      setQuestions(nextQuestions);
+      setQuestionIndex(0);
+      setAnswers({});
+      setDraftAnswer("");
+      setStep("questions");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Nao foi possivel continuar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function selectProduct(id: string) {
+    setCreatingProduct(false);
+    setProductId(id);
+    setPhotoFile(null);
+  }
+
+  async function handleCreateProduct() {
+    if (!newProductName.trim()) {
+      toast.error("Informe o nome do produto.");
+      return;
+    }
+    if (!newProductPhoto) {
+      toast.error("Anexe a foto do produto.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const price = newProductPrice.trim() ? Number(newProductPrice.replace(",", ".")) : undefined;
+      const product = await productsApi.create({
+        name: newProductName.trim(),
+        price: price != null && !Number.isNaN(price) ? price : undefined,
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.products });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
-      queryClient.invalidateQueries({ queryKey: ["assets"] });
-      setProductId(created.id);
-      setServiceId(null);
+      await uploadLinkedImage(newProductPhoto, { productId: product.id, kind: "PRODUCT_PHOTO" });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.products });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.assets() });
+      setProductId(product.id);
       setCreatingProduct(false);
       setNewProductName("");
       setNewProductPrice("");
       setNewProductPhoto(null);
-      setPhotoFile(null);
-      toast.success("Produto cadastrado. Ele entra neste post.");
+      toast.success("Produto cadastrado.");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Nao foi possivel cadastrar o produto.");
     } finally {
@@ -350,72 +300,20 @@ function CriarFlow() {
     }
   }
 
-  async function handleContinueChoice() {
-    if (!objective) {
-      toast.error("Escolha um objetivo.");
-      return;
-    }
-    if (creatingProduct) {
-      toast.error("Cadastre o produto ou escolha um ja existente.");
-      return;
-    }
-    if (!resolvedProductId && !resolvedServiceId) {
-      toast.error("Escolha um produto ou cadastre um novo. Ele entra na geracao.");
-      return;
-    }
-    if (!selectedHasPhoto) {
-      if (!photoFile) {
-        toast.error("Anexe a foto do produto. Ela entra na capa gerada.");
-        return;
-      }
-      setBusy(true);
-      try {
-        await uploadLinkedImage(photoFile, {
-          kind: "PRODUCT_PHOTO",
-          productId: resolvedProductId,
-          serviceId: resolvedServiceId,
-        });
-        queryClient.invalidateQueries({ queryKey: ["assets"] });
-        setPhotoFile(null);
-      } catch (err) {
-        setBusy(false);
-        toast.error(err instanceof Error ? err.message : "Falha ao enviar a foto.");
-        return;
-      }
-      setBusy(false);
-    }
-    void begin(objective, resolvedProductId, resolvedServiceId);
-  }
-
-  async function finishQuestions(nextAnswers: Record<string, string>) {
-    if (!objective) return;
-    await generateContent({
-      objective,
-      productId: resolvedProductId,
-      serviceId: resolvedServiceId,
-      answers: nextAnswers,
-    });
-  }
-
   async function handleQuestionNext() {
-    if (!currentQuestion || !objective) return;
+    if (!currentQuestion) return;
     if (currentQuestion.kind === "choice" && !draftAnswer) {
       toast.error("Escolha uma opcao ou pule.");
       return;
     }
-    if (currentQuestion.kind === "text" && !draftAnswer.trim()) {
-      toast.error("Escreva uma resposta ou pule.");
-      return;
-    }
-    if (currentQuestion.kind === "money" && !draftAnswer.trim()) {
-      toast.error("Informe o preco, escolha nao mostrar, ou pule.");
+    if ((currentQuestion.kind === "text" || currentQuestion.kind === "money") && !draftAnswer.trim()) {
+      toast.error("Responda ou pule.");
       return;
     }
     setBusy(true);
     const nextAnswers = { ...answers, [currentQuestion.key]: draftAnswer.trim() };
     setAnswers(nextAnswers);
-    const isLast = questionIndex >= questions.length - 1;
-    if (isLast) {
+    if (questionIndex >= questions.length - 1) {
       await finishQuestions(nextAnswers);
     } else {
       setQuestionIndex((index) => index + 1);
@@ -425,11 +323,10 @@ function CriarFlow() {
   }
 
   async function handleQuestionSkip() {
-    if (!currentQuestion || !objective) return;
+    if (!currentQuestion) return;
     setBusy(true);
     try {
-      const isLast = questionIndex >= questions.length - 1;
-      if (isLast) {
+      if (questionIndex >= questions.length - 1) {
         await finishQuestions(answers);
         return;
       }
@@ -441,27 +338,50 @@ function CriarFlow() {
   }
 
   const approveMutation = useMutation({
-    mutationFn: (id: string) => contentsApi.approve(id),
+    mutationFn: (id: string) => campaignsApi.approve(id),
     onSuccess: (updated) => {
-      setContent(updated);
-      queryClient.invalidateQueries({ queryKey: ["contents"] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
-      toast.success("Conteudo aprovado.");
+      setCampaign(updated);
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns() });
+      toast.success("Campanha aprovada.");
     },
     onError: (err: unknown) =>
       toast.error(err instanceof ApiError ? err.message : "Nao foi possivel aprovar."),
   });
 
-  function handleRedo() {
-    const payload = lastRequest.current;
-    if (!payload) return;
-    void generateContent(payload);
+  async function handleRegenerate(output: CampaignOutput) {
+    if (!campaign) return;
+    setRegenerating(output);
+    try {
+      const accepted = await campaignsApi.regenerate(campaign.id, { output });
+      const job = await watch(accepted.job_id, accepted.kind, { showToast: true });
+      if (job?.status === "COMPLETED") {
+        setCampaign(await campaignsApi.get(campaign.id));
+      }
+    } finally {
+      setRegenerating(null);
+    }
+  }
+
+  function applyDestination(next: CampaignDestination) {
+    setDestination(next);
+    const preset = DESTINATIONS.find((item) => item.value === next);
+    if (preset) setOutputs(preset.defaults);
+  }
+
+  function toggleOutput(output: CampaignOutput) {
+    setOutputs((current) => {
+      if (current.includes(output)) {
+        if (output === "COPY") return current;
+        return current.filter((item) => item !== output);
+      }
+      return [...current, output];
+    });
   }
 
   const canContinueChoice =
-    Boolean(objective) &&
+    Boolean(destination) &&
     !creatingProduct &&
-    Boolean(resolvedProductId || resolvedServiceId) &&
+    Boolean(resolvedProductId) &&
     (selectedHasPhoto || Boolean(photoFile));
   const bootingFromQuery =
     bootReady && step === "choice" && (bootQuestions.isPending || skipToQuestions);
@@ -478,41 +398,142 @@ function CriarFlow() {
   return (
     <div>
       <PageHeader
-        title="Criar"
-        description="Escolha ou cadastre o produto, anexe a foto e defina o objetivo. Esse produto entra na geracao."
+        title="Gerar campanha"
+        description="Entregue o produto. A plataforma decide o conteudo que vende."
       />
 
       {bootingFromQuery && <PageSpinner label="Preparando..." />}
 
       {step === "choice" && !bootingFromQuery && (
-        <ChoiceStep
-          objective={objective}
-          productId={resolvedProductId}
-          serviceId={resolvedServiceId}
-          products={products ?? []}
-          services={services ?? []}
-          assets={catalogAssets ?? []}
-          creatingProduct={creatingProduct}
-          newProductName={newProductName}
-          newProductPrice={newProductPrice}
-          newProductPhoto={newProductPhoto}
-          photoFile={photoFile}
-          fileInputRef={fileInputRef}
-          selectedHasPhoto={selectedHasPhoto}
-          loading={!catalogReady || busy}
-          canContinue={canContinueChoice}
-          onObjective={setObjective}
-          onSelectProduct={selectProduct}
-          onSelectService={selectService}
-          onStartCreateProduct={startCreateProduct}
-          onCancelCreateProduct={() => setCreatingProduct(false)}
-          onNewProductName={setNewProductName}
-          onNewProductPrice={setNewProductPrice}
-          onNewProductPhoto={setNewProductPhoto}
-          onPhoto={setPhotoFile}
-          onCreateProduct={() => void handleCreateProduct()}
-          onContinue={() => void handleContinueChoice()}
-        />
+        <div className="mx-auto max-w-2xl space-y-8">
+          <section>
+            <h2 className="text-sm font-semibold text-foreground">Qual produto vamos vender?</h2>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <CatalogChip
+                active={creatingProduct}
+                icon={<Plus className="h-3.5 w-3.5" />}
+                onClick={() => setCreatingProduct(true)}
+              >
+                Novo produto
+              </CatalogChip>
+              {(products ?? []).map((product) => (
+                <CatalogChip
+                  key={product.id}
+                  active={!creatingProduct && resolvedProductId === product.id}
+                  thumb={photoUrlFor(catalogAssets ?? [], product.id)}
+                  icon={<Tag className="h-3.5 w-3.5" />}
+                  onClick={() => selectProduct(product.id)}
+                >
+                  {product.name}
+                  {product.price != null ? ` · ${formatCurrency(product.price, product.currency)}` : ""}
+                </CatalogChip>
+              ))}
+            </div>
+            {creatingProduct && (
+              <div className="mt-4 space-y-3 rounded-2xl border border-brand-200 bg-brand-50/40 p-4">
+                <Label htmlFor="new-product-name">Nome</Label>
+                <Input
+                  id="new-product-name"
+                  value={newProductName}
+                  onChange={(event) => setNewProductName(event.target.value)}
+                  placeholder="Ex.: Bolsa de couro caramelo"
+                />
+                <Label htmlFor="new-product-price">Preco (opcional)</Label>
+                <Input
+                  id="new-product-price"
+                  inputMode="decimal"
+                  value={newProductPrice}
+                  onChange={(event) => setNewProductPrice(event.target.value)}
+                  placeholder="Ex.: 199,90"
+                />
+                <PhotoField
+                  id="new-product-photo"
+                  label="Foto do produto"
+                  hint="Obrigatorio. A foto condiciona imagem e video."
+                  file={newProductPhoto}
+                  onChange={setNewProductPhoto}
+                />
+                <div className="flex gap-2">
+                  <Button variant="ghost" onClick={() => setCreatingProduct(false)} disabled={busy}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={() => void handleCreateProduct()} loading={busy} className="flex-1">
+                    Cadastrar produto
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!creatingProduct && resolvedProductId && !selectedHasPhoto && (
+              <div className="mt-4 rounded-2xl border border-dashed border-brand-300 bg-brand-50/30 p-4">
+                <PhotoField
+                  id="selected-product-photo"
+                  label="Foto deste produto"
+                  hint="Anexe agora: ela entra na geracao."
+                  file={photoFile}
+                  inputRef={fileInputRef}
+                  onChange={setPhotoFile}
+                />
+              </div>
+            )}
+          </section>
+
+          <section>
+            <h2 className="text-sm font-semibold text-foreground">Onde publicar?</h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {DESTINATIONS.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => applyDestination(item.value)}
+                  className={cn(
+                    "rounded-2xl border px-4 py-4 text-left transition-colors",
+                    destination === item.value
+                      ? "border-brand-500 bg-brand-50"
+                      : "border-border-subtle bg-surface hover:border-brand-200"
+                  )}
+                >
+                  <p className="font-semibold text-foreground">{item.label}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-foreground/55">{item.description}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {destination && (
+            <section>
+              <h2 className="text-sm font-semibold text-foreground">O que gerar?</h2>
+              <p className="mt-1 text-sm text-foreground/55">
+                Combinacao recomendada para {DESTINATION_META[destination].label}. Ajuste se quiser.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(["IMAGE", "VIDEO", "COPY"] as CampaignOutput[]).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => toggleOutput(item)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-sm",
+                      outputs.includes(item)
+                        ? "border-brand-500 bg-brand-50 text-brand-800"
+                        : "border-border-subtle text-foreground/60"
+                    )}
+                  >
+                    {item === "IMAGE" ? "Imagem" : item === "VIDEO" ? "Video" : "Copy"}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <Button
+            size="lg"
+            onClick={() => void handleContinueChoice()}
+            disabled={!canContinueChoice}
+            loading={busy}
+          >
+            Gerar campanha
+          </Button>
+        </div>
       )}
 
       {step === "questions" && currentQuestion && (
@@ -522,7 +543,7 @@ function CriarFlow() {
           total={questions.length}
           draft={draftAnswer}
           busy={busy || isWatching}
-          itemLabel={selectedProduct?.name ?? selectedService?.name ?? null}
+          itemLabel={selectedProduct?.name ?? null}
           onDraft={setDraftAnswer}
           onSkip={() => void handleQuestionSkip()}
           onNext={() => void handleQuestionNext()}
@@ -539,67 +560,69 @@ function CriarFlow() {
       )}
 
       {step === "generating" && (
-        <GeneratingStep
-          stage={stage}
-          progress={progress}
-          status={jobStatus}
-          error={error}
-          onRetry={handleRedo}
-          onBack={() => setStep("choice")}
-        />
+        <Card className="mx-auto max-w-md">
+          <CardContent className="space-y-5 p-6 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Gerando sua campanha</h2>
+              <p className="mt-1 text-sm text-foreground/55">
+                Copy, imagem e video sobem em etapas. Voce pode exportar ao terminar.
+              </p>
+            </div>
+            <Progress value={progress} />
+            <StageChecklist stage={stage} status={jobStatus} outputs={outputs} />
+            {error && (
+              <div className="space-y-3 rounded-xl bg-danger-bg px-4 py-3 text-sm text-danger-fg">
+                <p>{error}</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setStep("choice")}>
+                    Voltar
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => lastRequest.current && void generateCampaign(lastRequest.current)}
+                  >
+                    Tentar de novo
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {step === "preview" && content && (
+      {step === "preview" && campaign && (
         <div className="space-y-6">
-          <ContentPreview
-            content={content}
+          <CampaignPreview
+            campaign={campaign}
+            onRegenerate={(output) => void handleRegenerate(output)}
+            regenerating={regenerating}
             actions={
               <>
                 <Button
                   icon={<Check className="h-4 w-4" />}
-                  onClick={() => approveMutation.mutate(content.id)}
+                  onClick={() => approveMutation.mutate(campaign.id)}
                   loading={approveMutation.isPending}
-                  disabled={content.status === "APPROVED" || content.status === "SCHEDULED"}
+                  disabled={campaign.status === "APPROVED"}
                 >
-                  {content.status === "APPROVED" || content.status === "SCHEDULED"
-                    ? "Aprovado"
-                    : "Aprovar"}
+                  {campaign.status === "APPROVED" ? "Aprovada" : "Aprovar"}
                 </Button>
                 <Button
                   variant="outline"
                   icon={<RefreshCw className="h-4 w-4" />}
-                  onClick={handleRedo}
+                  onClick={() => lastRequest.current && void generateCampaign(lastRequest.current)}
                   loading={isWatching}
                 >
                   Refazer
                 </Button>
                 <Button
                   variant="outline"
-                  icon={<Calendar className="h-4 w-4" />}
-                  onClick={() => setScheduleOpen(true)}
+                  icon={<Download className="h-4 w-4" />}
+                  onClick={() => router.push(`/contents/${campaign.id}`)}
                 >
-                  Agendar
+                  Abrir campanha
                 </Button>
               </>
             }
-          />
-          <div className="flex justify-center">
-            <button
-              type="button"
-              onClick={() => router.push(`/contents/${content.id}`)}
-              className="text-sm font-medium text-brand-700 hover:underline"
-            >
-              Abrir no editor completo
-            </button>
-          </div>
-          <ScheduleDialog
-            open={scheduleOpen}
-            content={content}
-            onClose={() => setScheduleOpen(false)}
-            onScheduled={(updated) => {
-              setContent(updated);
-              setScheduleOpen(false);
-            }}
           />
         </div>
       )}
@@ -607,235 +630,21 @@ function CriarFlow() {
   );
 }
 
-function itemHasReadyImage(
-  assets: AssetRead[] | undefined,
-  productId: string | null,
-  serviceId: string | null
-): boolean {
-  if (!assets || (!productId && !serviceId)) return false;
-  return assets.some((asset) => {
-    if (asset.status !== "READY" || !asset.mime_type.startsWith("image/")) return false;
-    if (productId && asset.product_id === productId) return true;
-    if (serviceId && asset.service_id === serviceId) return true;
-    return false;
-  });
-}
-
-function photoUrlFor(
-  assets: AssetRead[],
-  productId?: string | null,
-  serviceId?: string | null
-): string | null {
-  const match = assets.find((asset) => {
-    if (asset.status !== "READY" || !asset.url) return false;
-    if (productId && asset.product_id === productId) return true;
-    if (serviceId && asset.service_id === serviceId) return true;
-    return false;
-  });
-  return match?.url ?? null;
-}
-
-function ChoiceStep({
-  objective,
-  productId,
-  serviceId,
-  products,
-  services,
-  assets,
-  creatingProduct,
-  newProductName,
-  newProductPrice,
-  newProductPhoto,
-  photoFile,
-  fileInputRef,
-  selectedHasPhoto,
-  loading,
-  canContinue,
-  onObjective,
-  onSelectProduct,
-  onSelectService,
-  onStartCreateProduct,
-  onCancelCreateProduct,
-  onNewProductName,
-  onNewProductPrice,
-  onNewProductPhoto,
-  onPhoto,
-  onCreateProduct,
-  onContinue,
-}: {
-  objective: ContentObjective | null;
-  productId: string | null;
-  serviceId: string | null;
-  products: ProductRead[];
-  services: ServiceRead[];
-  assets: AssetRead[];
-  creatingProduct: boolean;
-  newProductName: string;
-  newProductPrice: string;
-  newProductPhoto: File | null;
-  photoFile: File | null;
-  fileInputRef: RefObject<HTMLInputElement | null>;
-  selectedHasPhoto: boolean;
-  loading: boolean;
-  canContinue: boolean;
-  onObjective: (value: ContentObjective) => void;
-  onSelectProduct: (id: string) => void;
-  onSelectService: (id: string) => void;
-  onStartCreateProduct: () => void;
-  onCancelCreateProduct: () => void;
-  onNewProductName: (value: string) => void;
-  onNewProductPrice: (value: string) => void;
-  onNewProductPhoto: (file: File | null) => void;
-  onPhoto: (file: File | null) => void;
-  onCreateProduct: () => void;
-  onContinue: () => void;
-}) {
-  const selectedPhotoUrl = photoUrlFor(assets, productId, serviceId);
-
-  return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <section>
-        <h2 className="text-sm font-semibold text-foreground">Qual produto vamos divulgar?</h2>
-        <p className="mt-1 text-sm text-foreground/55">
-          Cadastre um novo ou escolha um ja existente. Esse produto entra obrigatoriamente na
-          geracao. A foto e anexada aqui, nao depois.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <CatalogChip
-            active={creatingProduct}
-            icon={<Plus className="h-3.5 w-3.5" />}
-            onClick={onStartCreateProduct}
-          >
-            Novo produto
-          </CatalogChip>
-          {products.map((product) => (
-            <CatalogChip
-              key={product.id}
-              active={!creatingProduct && productId === product.id}
-              thumb={photoUrlFor(assets, product.id)}
-              icon={<Tag className="h-3.5 w-3.5" />}
-              onClick={() => onSelectProduct(product.id)}
-            >
-              {product.name}
-              {product.price != null ? ` · ${formatCurrency(product.price, product.currency)}` : ""}
-            </CatalogChip>
-          ))}
-        </div>
-        {services.length > 0 && (
-          <div className="mt-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground/45">
-              Ou um servico ja cadastrado
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {services.map((service) => (
-                <CatalogChip
-                  key={service.id}
-                  active={!creatingProduct && serviceId === service.id}
-                  thumb={photoUrlFor(assets, null, service.id)}
-                  icon={<Store className="h-3.5 w-3.5" />}
-                  onClick={() => onSelectService(service.id)}
-                >
-                  {service.name}
-                </CatalogChip>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {creatingProduct && (
-          <div className="mt-4 space-y-3 rounded-2xl border border-brand-200 bg-brand-50/40 p-4">
-            <p className="text-sm font-medium text-foreground">Cadastrar produto</p>
-            <div>
-              <Label htmlFor="new-product-name">Nome</Label>
-              <Input
-                id="new-product-name"
-                value={newProductName}
-                onChange={(event) => onNewProductName(event.target.value)}
-                placeholder="Ex.: Vestido midi de linho"
-              />
-            </div>
-            <div>
-              <Label htmlFor="new-product-price">Preco (opcional)</Label>
-              <Input
-                id="new-product-price"
-                inputMode="decimal"
-                value={newProductPrice}
-                onChange={(event) => onNewProductPrice(event.target.value)}
-                placeholder="Ex.: 199,90"
-              />
-            </div>
-            <PhotoField
-              id="new-product-photo"
-              label="Foto do produto"
-              hint="Obrigatorio. Esta foto e a referencia da capa gerada."
-              file={newProductPhoto}
-              onChange={onNewProductPhoto}
-            />
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={onCancelCreateProduct} disabled={loading}>
-                Cancelar
-              </Button>
-              <Button onClick={onCreateProduct} loading={loading} className="flex-1">
-                Cadastrar e usar neste post
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {!creatingProduct && (productId || serviceId) && !selectedHasPhoto && (
-          <div className="mt-4 rounded-2xl border border-dashed border-brand-300 bg-brand-50/30 p-4">
-            <PhotoField
-              id="selected-product-photo"
-              label="Foto deste produto"
-              hint="Ainda nao tem foto. Anexe agora: ela entra na capa gerada."
-              file={photoFile}
-              inputRef={fileInputRef}
-              previewUrl={selectedPhotoUrl}
-              onChange={onPhoto}
-            />
-          </div>
-        )}
-
-        {!creatingProduct && selectedHasPhoto && selectedPhotoUrl && (
-          <p className="mt-3 flex items-center gap-2 text-sm text-foreground/55">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={selectedPhotoUrl}
-              alt=""
-              className="h-10 w-10 rounded-lg object-cover"
-            />
-            Foto do produto pronta. Ela entra na capa.
-          </p>
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold text-foreground">Qual o objetivo?</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          {OBJECTIVES.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => onObjective(item.value)}
-              className={cn(
-                "rounded-2xl border px-4 py-4 text-left transition-colors",
-                objective === item.value
-                  ? "border-brand-500 bg-brand-50"
-                  : "border-border-subtle bg-surface hover:border-brand-200"
-              )}
-            >
-              <p className="font-semibold text-foreground">{item.label}</p>
-              <p className="mt-1 text-xs leading-relaxed text-foreground/55">{item.description}</p>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <Button size="lg" onClick={onContinue} disabled={!canContinue} loading={loading}>
-        Continuar
-      </Button>
-    </div>
+function itemHasReadyImage(assets: AssetRead[] | undefined, productId: string | null): boolean {
+  if (!assets || !productId) return false;
+  return assets.some(
+    (asset) =>
+      asset.status === "READY" &&
+      asset.mime_type.startsWith("image/") &&
+      asset.product_id === productId
   );
+}
+
+function photoUrlFor(assets: AssetRead[], productId?: string | null): string | null {
+  const match = assets.find(
+    (asset) => asset.status === "READY" && asset.url && productId && asset.product_id === productId
+  );
+  return match?.url ?? null;
 }
 
 function PhotoField({
@@ -970,7 +779,6 @@ function QuestionStep({
         {itemLabel ? ` · ${itemLabel}` : ""}
       </p>
       <h2 className="mt-2 text-2xl font-semibold text-foreground">{question.question}</h2>
-
       <div className="mt-6 space-y-4">
         {question.kind === "choice" && (
           <div className="grid gap-2">
@@ -991,16 +799,9 @@ function QuestionStep({
             ))}
           </div>
         )}
-
         {question.kind === "text" && (
-          <Textarea
-            rows={3}
-            value={draft}
-            onChange={(event) => onDraft(event.target.value)}
-            placeholder="Uma frase, no seu tom."
-          />
+          <Textarea rows={3} value={draft} onChange={(event) => onDraft(event.target.value)} />
         )}
-
         {question.kind === "money" && (
           <div className="space-y-3">
             <Input
@@ -1027,118 +828,14 @@ function QuestionStep({
           </div>
         )}
       </div>
-
       <div className="mt-8 flex gap-2">
         <Button variant="ghost" onClick={onSkip} disabled={busy}>
           Pular
         </Button>
         <Button onClick={onNext} loading={busy} className="flex-1">
-          {index === total - 1 ? "Gerar conteudo" : "Proxima"}
+          {index === total - 1 ? "Gerar campanha" : "Proxima"}
         </Button>
       </div>
     </div>
-  );
-}
-
-function GeneratingStep({
-  stage,
-  progress,
-  status,
-  error,
-  onRetry,
-  onBack,
-}: {
-  stage: string | null;
-  progress: number;
-  status: JobRead["status"];
-  error: string | null;
-  onRetry: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <Card className="mx-auto max-w-md">
-      <CardContent className="space-y-5 p-6 pt-6">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Gerando seu conteudo</h2>
-          <p className="mt-1 text-sm text-foreground/55">
-            Um job so, com as etapas visiveis. Nada de video falso no meio do caminho.
-          </p>
-        </div>
-        <Progress value={progress} />
-        <StageChecklist stage={stage} status={status} />
-        {error && (
-          <div className="space-y-3 rounded-xl bg-danger-bg px-4 py-3 text-sm text-danger-fg">
-            <p>{error}</p>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={onBack}>
-                Voltar
-              </Button>
-              <Button size="sm" onClick={onRetry}>
-                Tentar de novo
-              </Button>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ScheduleDialog({
-  open,
-  content,
-  onClose,
-  onScheduled,
-}: {
-  open: boolean;
-  content: ContentRead;
-  onClose: () => void;
-  onScheduled: (updated: ContentRead) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [date, setDate] = useState(content.planned_date ?? "");
-
-  const mutation = useMutation({
-    mutationFn: () => contentsApi.schedule(content.id, date),
-    onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ["contents"] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
-      queryClient.invalidateQueries({ queryKey: ["calendar"] });
-      toast.success("Data planejada.");
-      onScheduled(updated);
-    },
-    onError: (err: unknown) =>
-      toast.error(err instanceof ApiError ? err.message : "Nao foi possivel agendar."),
-  });
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="Agendar"
-      description="Define o dia no calendario. A publicacao automatica no Instagram ainda nao existe."
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={() => mutation.mutate()}
-            disabled={!date}
-            loading={mutation.isPending}
-          >
-            Confirmar data
-          </Button>
-        </>
-      }
-    >
-      <Label htmlFor="planned_date">Dia</Label>
-      <Input
-        id="planned_date"
-        type="date"
-        value={date}
-        onChange={(event) => setDate(event.target.value)}
-      />
-    </Dialog>
   );
 }

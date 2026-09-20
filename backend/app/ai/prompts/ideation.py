@@ -69,7 +69,7 @@ def build_ideation_prompt(
 
 ## TAREFA
 
-Gere exatamente {len(categories)} ideias de conteudo para Instagram, uma para \
+Gere exatamente {len(categories)} ideias de conteudo comercial, uma para \
 cada pilar abaixo, na mesma ordem:
 
 {chr(10).join(briefing_lines)}

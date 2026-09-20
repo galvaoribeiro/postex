@@ -3,7 +3,6 @@
 import {
   CreditCard,
   Image as ImageIcon,
-  Lightbulb,
   Share2,
   Store,
   User,
@@ -25,7 +24,7 @@ const ITEMS: {
   {
     href: "/settings/negocio",
     label: "Negocio",
-    description: "Dados da empresa, produtos e servicos.",
+    description: "Dados da empresa e produtos.",
     icon: Store,
   },
   {
@@ -35,20 +34,14 @@ const ITEMS: {
     icon: ImageIcon,
   },
   {
-    href: "/settings/ideias",
-    label: "Ideias",
-    description: "Geracao avulsa de ideias. Sem polimento extra.",
-    icon: Lightbulb,
-  },
-  {
     href: "/settings/conta",
     label: "Conta",
     description: "Perfil, senha e motor de IA.",
     icon: User,
   },
   {
-    label: "Instagram",
-    description: "Publicacao automatica ainda nao esta disponivel.",
+    label: "Conexoes",
+    description: "Instagram e TikTok: publicacao automatica ainda nao esta disponivel. Exporte e publique manualmente.",
     icon: Share2,
     disabled: true,
   },

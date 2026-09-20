@@ -67,6 +67,7 @@ class AssetRead(APIModel):
     size_bytes: int | None
     width: int | None
     height: int | None
+    duration_seconds: int | None = None
     title: str | None
     alt_text: str | None
     tags: list[str]

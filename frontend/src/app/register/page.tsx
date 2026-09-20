@@ -36,7 +36,7 @@ export default function RegisterPage() {
   return (
     <AuthLayout
       title="Criar sua conta"
-      description="Comece a manter o Instagram do seu negocio sempre ativo"
+      description="Transforme qualquer produto em conteudo que vende"
       footer={
         <>
           Ja tem conta?{" "}

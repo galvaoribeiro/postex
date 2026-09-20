@@ -7,6 +7,7 @@ uso de relacionamentos por string e que o Alembic veja todas as tabelas.
 from app.models.asset import Asset
 from app.models.base import Base
 from app.models.business import Business
+from app.models.campaign import Campaign
 from app.models.catalog import Product, Service
 from app.models.content import Content, ContentAsset, ContentIdea, ContentVersion
 from app.models.job import Job
@@ -16,6 +17,7 @@ __all__ = [
     "Asset",
     "Base",
     "Business",
+    "Campaign",
     "Content",
     "ContentAsset",
     "ContentIdea",

@@ -1,24 +1,21 @@
-# Motor de Conteudo
+# POSTEX
 
-SaaS de estrategia de conteudo com IA para pequenos negocios e autonomos manterem
-presenca consistente no Instagram. O produto nao gera posts genericos: ele entende
-o negocio (segmento, publico, diferenciais, produtos e servicos) e, a partir desse
-contexto, cria o **conteudo pronto para revisao** (roteiro, legenda, CTA, hashtags,
-cenas por formato) em um unico job, e um **still de capa** gerado a partir do
-contexto do negocio e da peca (mock local, OpenAI ou Flux).
+SaaS que transforma produtos em conteudo que vende. O usuario entrega um
+produto (ou uma foto) e a plataforma gera uma **campanha** para Instagram,
+TikTok ou TikTok Shop — com imagem, video real e copy prontos para exportar
+e publicar manualmente.
 
 Fluxo do produto:
 
 ```
-Usuario -> Onboarding (negocio + item + objetivo)
-        -> Inicio (atalho)
-        -> Criar (perguntas -> job unico -> preview)
-        -> Aprovar / Agendar -> Calendario
+Usuario -> Onboarding (negocio + produto + foto)
+        -> Inicio (produto + destino)
+        -> Criar (saidas -> perguntas -> campanha)
+        -> Revisar / Exportar
 ```
 
 A geracao de ideias continua existindo no backend, como etapa interna do job
-`CONTENT_CREATION`. A tela de Ideias ficou em Configuracoes, sem ser o caminho
-diario. Detalhes em [ARCHITECTURE.md](ARCHITECTURE.md).
+de campanha. Detalhes em [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Stack
 
@@ -42,7 +39,7 @@ POSTEX/
 │   │   ├── schemas/   # Pydantic schemas
 │   │   ├── services/  # regras de negocio
 │   │   ├── repositories/
-│   │   ├── ai/        # AIProvider, prompts, motor de conteudo, taxonomia
+│   │   ├── ai/        # texto, imagem, video, prompts, motor de campanha
 │   │   ├── workers/   # Celery app e tasks
 │   │   └── core/      # config, database, security, exceptions, logging
 │   ├── alembic/       # migrations
@@ -137,16 +134,11 @@ Veja `.env.example` para a lista completa e comentada. Pontos importantes:
   API**, com um provider determinístico derivado dos dados reais do negocio.
   Troque para `openai` e preencha `OPENAI_API_KEY` para usar IA real.
 - `IMAGE_PROVIDER` segue `AI_PROVIDER` se vazio. Use `mock` para stills locais
-  mesmo com texto real (sem gastar credito de imagem). Still real: `openai` +
-  `OPENAI_IMAGE_MODEL` (padrao `gpt-image-2`) ou `flux` + `FAL_KEY` (fal.ai).
-  Se o item focado tiver uma foto `READY`, o still e condicionado a esses pixels:
-  OpenAI usa `images.edit`; Flux usa `FAL_KONTEXT_MODEL` (padrao
-  `fal-ai/flux-pro/kontext`). Sem foto, o caminho permanece text-to-image
-  (`images.generate` / `FAL_IMAGE_MODEL`).
-- O visual base da capa vive em `backend/app/ai/image/prompt.py` (`CREATIVE_BRIEF`).
-  Produto, marca, local e cena da peca entram automaticamente no prompt; nao ha
-  seletor de tom ou apresentadora na UI. O produto e a foto dele sao escolhidos
-  em `/criar`; Configuracoes → Produtos so edita o que ja existe.
+  mesmo com texto real. Still real: `openai` ou `flux` + `FAL_KEY`.
+- `VIDEO_PROVIDER` vazio usa `mock` (nao herda do provedor de imagem). Video
+  real: `VIDEO_PROVIDER=fal` + `FAL_KEY` + `FAL_VIDEO_MODEL`.
+- O prompt comercial de imagem vive em `backend/app/ai/image/prompt.py`. O
+  produto e a foto dele sao escolhidos em `/criar`.
 - `AI_EXECUTION_MODE`: `celery` (producao, exige worker) ou `inline` (executa no
   processo da API, util para dev/testes sem worker).
 - Nenhuma chave de IA e exposta ao frontend; todas as chamadas de IA passam pelo
