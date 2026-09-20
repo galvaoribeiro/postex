@@ -15,8 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ValidationError
 from app.models.business import Business
 from app.models.catalog import Product, Service
-from app.models.enums import AssetStatus, ContentObjective
-from app.repositories.asset import AssetRepository
+from app.models.enums import ContentObjective
 from app.schemas.content import CreationQuestion, QuestionOption
 from app.services.catalog_service import ProductService, ServiceCatalogService
 
@@ -79,25 +78,6 @@ async def resolve_creation_item(
     return product, service
 
 
-async def has_linked_image(
-    session: AsyncSession,
-    business_id: uuid.UUID,
-    *,
-    product_id: uuid.UUID | None = None,
-    service_id: uuid.UUID | None = None,
-) -> bool:
-    if not product_id and not service_id:
-        return False
-    assets = await AssetRepository(session).list_filtered(
-        business_id,
-        status=AssetStatus.READY,
-        product_id=product_id,
-        service_id=service_id,
-        limit=8,
-    )
-    return any(asset.mime_type.startswith("image/") for asset in assets)
-
-
 async def list_creation_questions(
     session: AsyncSession,
     business: Business,
@@ -106,33 +86,7 @@ async def list_creation_questions(
     product: Product | None,
     service: Service | None,
 ) -> list[CreationQuestion]:
-    item = product or service
     questions: list[CreationQuestion] = []
-
-    if (
-        objective is ContentObjective.SELL
-        and item is not None
-        and not await has_linked_image(
-            session,
-            business.id,
-            product_id=product.id if product else None,
-            service_id=service.id if service else None,
-        )
-    ):
-        label = "produto" if product is not None else "servico"
-        questions.append(
-            CreationQuestion(
-                key="product_photo",
-                question=f"Tem uma foto deste {label}?",
-                kind="choice",
-                options=[
-                    QuestionOption(value="upload_now", label="Vou enviar agora"),
-                    QuestionOption(value="skip", label="Nao tenho"),
-                ],
-                optional=True,
-                persist_to=None,
-            )
-        )
 
     priced = product if product is not None else service
     if objective is ContentObjective.SELL and priced is not None and priced.price is None:

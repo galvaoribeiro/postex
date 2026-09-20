@@ -117,6 +117,8 @@ class Settings(BaseSettings):
     IMAGE_PROVIDER: str | None = None
     FAL_KEY: str | None = None
     FAL_IMAGE_MODEL: str = "fal-ai/flux/dev"
+    # So quando o still tem foto de produto. Text-to-image continua em FAL_IMAGE_MODEL.
+    FAL_KONTEXT_MODEL: str = "fal-ai/flux-pro/kontext"
     FAL_TIMEOUT_SECONDS: int = 120
     # false = pede a fal para nao filtrar. A conta precisa estar autorizada
     # no painel da fal.ai; senão o checker continua ativo no servidor.

@@ -61,6 +61,15 @@ _HARD_NEGATIVE = (
     "text overlay, watermark, gym interior unless fitness business"
 )
 
+# No comeco: Flux/CLIP leem o inicio. Restage, nao "editar o fundo".
+_REFERENCE_FIDELITY = (
+    "PRODUCT FIDELITY: Keep the product from the reference photo identical — "
+    "same shape, color, packaging and labels. Do not replace it with an invented "
+    "product. Restage that same product in a new commercial photograph: new scene, "
+    "person and environment from the brief below. This is a restage, not a "
+    "background edit."
+)
+
 
 def size_for_format(content_format: ContentFormat) -> str:
     if content_format in {ContentFormat.REEL, ContentFormat.STORY}:
@@ -101,6 +110,7 @@ def build_still_prompt(
     context: BusinessContext,
     production: ProductionResult,
     seed: int,
+    has_reference: bool = False,
 ) -> ImagePrompt:
     focused = next((item for item in context.products if item.is_focus), None)
     focused_service = next((item for item in context.services if item.is_focus), None)
@@ -135,6 +145,7 @@ def build_still_prompt(
         ),
     )
     prompt = _join_prompt(
+        _REFERENCE_FIDELITY if has_reference else "",
         commercial,
         CREATIVE_BRIEF.strip(),
         _HARD_SAFETY,

@@ -208,6 +208,32 @@ class StorageService:
         except (BotoCoreError, ClientError) as exc:
             raise StorageError("Nao foi possivel gravar a imagem gerada.") from exc
 
+    async def get_object(self, storage_key: str) -> bytes:
+        """Le bytes do bucket. A fal.ai nao alcanca MinIO em localhost."""
+        if self._use_memory:
+            data = self._memory.get(storage_key)
+            if data is None:
+                raise StorageError("Arquivo nao encontrado no storage.")
+            return data
+
+        def _get() -> bytes:
+            response = self._internal.get_object(Bucket=self.bucket, Key=storage_key)
+            body = response["Body"]
+            try:
+                return body.read()
+            finally:
+                body.close()
+
+        try:
+            return await asyncio.to_thread(_get)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code in {"404", "NoSuchKey", "NotFound"}:
+                raise StorageError("Arquivo nao encontrado no storage.") from exc
+            raise StorageError("Nao foi possivel ler o arquivo no storage.") from exc
+        except BotoCoreError as exc:
+            raise StorageError("Nao foi possivel ler o arquivo no storage.") from exc
+
     def create_presigned_download(
         self, storage_key: str, *, expires_in: int | None = None, internal: bool = False
     ) -> str:

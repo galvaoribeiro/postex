@@ -31,7 +31,7 @@ const ITEMS: {
   {
     href: "/settings/imagens",
     label: "Imagens",
-    description: "Fotos de produto, lugar e referencias.",
+    description: "Fotos do espaco, equipe e extras.",
     icon: ImageIcon,
   },
   {

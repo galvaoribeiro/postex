@@ -63,6 +63,33 @@ export async function uploadFileToSignedUrl(
   }
 }
 
+/** Sobe uma foto e liga ao produto/servico. A API nunca recebe o binario. */
+export async function uploadLinkedImage(
+  file: File,
+  options: {
+    kind?: AssetKind;
+    productId?: string | null;
+    serviceId?: string | null;
+  } = {}
+): Promise<AssetRead> {
+  const ticket = await assetsApi.createUploadUrl({
+    filename: file.name,
+    mime_type: file.type || "image/jpeg",
+    size_bytes: file.size,
+    kind: options.kind ?? "PRODUCT_PHOTO",
+    product_id: options.productId,
+    service_id: options.serviceId,
+  });
+  await uploadFileToSignedUrl(ticket, file);
+  const dimensions = await readImageDimensions(file);
+  return assetsApi.confirm(ticket.asset_id, {
+    size_bytes: file.size,
+    width: dimensions?.width,
+    height: dimensions?.height,
+    analyze: false,
+  });
+}
+
 export function readImageDimensions(file: File): Promise<{ width: number; height: number } | null> {
   if (!file.type.startsWith("image/")) return Promise.resolve(null);
   return new Promise((resolve) => {

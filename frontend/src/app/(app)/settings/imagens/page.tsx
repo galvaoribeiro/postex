@@ -69,7 +69,7 @@ export default function AssetsPage() {
     <div>
       <PageHeader
         title="Biblioteca de Imagens"
-        description="Fotos de produtos, do espaco e da equipe: material visual que a IA usa como contexto."
+        description="Fotos do espaco, equipe e extras. A foto do produto e anexada em Criar ou ao editar o produto."
         actions={
           <Button icon={<Upload className="h-4 w-4" />} onClick={() => setUploadOpen(true)}>
             Enviar imagem

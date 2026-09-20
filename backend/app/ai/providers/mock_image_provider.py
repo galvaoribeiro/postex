@@ -56,6 +56,7 @@ class MockImageProvider(ImageProvider):
             model=self.default_model,
             prompt=request.prompt,
             latency_ms=int((time.perf_counter() - started) * 1000),
+            used_reference=bool(request.references),
         )
 
     def _render(self, request: ImagePrompt) -> tuple[bytes, int, int]:
@@ -75,9 +76,14 @@ class MockImageProvider(ImageProvider):
 
         font = ImageFont.load_default()
         draw.text((36, height // 2 + 28), "Still gerado", fill=(255, 255, 255), font=font)
+        subtitle = (
+            "Preview local · COM REFERENCIA"
+            if request.references
+            else "Preview local · adulta ficticia"
+        )
         draw.text(
             (36, height // 2 + 52),
-            "Preview local · adulta ficticia",
+            subtitle,
             fill=(220, 220, 230),
             font=font,
         )

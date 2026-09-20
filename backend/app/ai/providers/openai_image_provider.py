@@ -6,6 +6,7 @@ Isolado do provedor de texto. O restante da aplicacao nao importa `openai`.
 from __future__ import annotations
 
 import base64
+import io
 import time
 from typing import Any, ClassVar
 
@@ -24,7 +25,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from app.ai.image.base import GeneratedImage, ImagePrompt, ImageProvider
+from app.ai.image.base import GeneratedImage, ImagePrompt, ImageProvider, ImageReference
 from app.ai.image.prompt import parse_size
 from app.core.config import Settings
 from app.core.config import settings as default_settings
@@ -34,6 +35,12 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 RETRYABLE_ERRORS = (APIConnectionError, APITimeoutError, RateLimitError)
+
+# images.edit do GPT Image nao aceita 1024x1792 (DALL-E 3). generate fica igual.
+_EDIT_SIZE_ALIASES = {
+    "1024x1792": "1024x1536",
+    "1792x1024": "1536x1024",
+}
 
 
 def _status_detail(exc: APIStatusError) -> str | None:
@@ -80,6 +87,9 @@ class OpenAIImageProvider(ImageProvider):
         if request.negative_prompt:
             prompt = f"{prompt}\n\nAvoid: {request.negative_prompt}"
 
+        used_reference = bool(request.references)
+        size = self._edit_size(request.size) if used_reference else request.size
+
         @retry(
             retry=retry_if_exception_type(RETRYABLE_ERRORS),
             stop=stop_after_attempt(max(1, self.settings.AI_MAX_RETRIES)),
@@ -87,6 +97,10 @@ class OpenAIImageProvider(ImageProvider):
             reraise=True,
         )
         async def _call() -> Any:
+            if used_reference:
+                return await self.client.images.edit(
+                    **self._edit_kwargs(model, prompt, size, request.references)
+                )
             return await self.client.images.generate(
                 **self._generate_kwargs(model, prompt, request.size)
             )
@@ -125,13 +139,14 @@ class OpenAIImageProvider(ImageProvider):
             raise AIProviderError("O provedor de imagem nao devolveu arquivo.")
 
         raw = await self._extract_bytes(data)
-        width, height = parse_size(request.size)
+        width, height = parse_size(size)
         latency_ms = int((time.perf_counter() - started) * 1000)
         logger.info(
             "ai_image_generation",
             provider=self.name,
             model=model,
             latency_ms=latency_ms,
+            used_reference=used_reference,
         )
         return GeneratedImage(
             data=raw,
@@ -142,6 +157,7 @@ class OpenAIImageProvider(ImageProvider):
             model=model,
             prompt=request.prompt,
             latency_ms=latency_ms,
+            used_reference=used_reference,
         )
 
     def _generate_kwargs(self, model: str, prompt: str, size: str) -> dict[str, Any]:
@@ -162,6 +178,32 @@ class OpenAIImageProvider(ImageProvider):
         kwargs["quality"] = "medium"
         return kwargs
 
+    def _edit_kwargs(
+        self,
+        model: str,
+        prompt: str,
+        size: str,
+        references: tuple[ImageReference, ...],
+    ) -> dict[str, Any]:
+        max_chars = 4000 if model.startswith("dall-e") else 32_000
+        files = [_file_from_reference(item) for item in references]
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "prompt": prompt[:max_chars],
+            "image": files[0] if len(files) == 1 else files,
+            "size": size,
+            "n": 1,
+        }
+        if model.startswith("dall-e"):
+            kwargs["response_format"] = "b64_json"
+            return kwargs
+        kwargs["output_format"] = "png"
+        kwargs["quality"] = "medium"
+        return kwargs
+
+    def _edit_size(self, size: str) -> str:
+        return _EDIT_SIZE_ALIASES.get(size.lower(), size)
+
     async def _extract_bytes(self, data: Any) -> bytes:
         b64 = getattr(data, "b64_json", None)
         if b64:
@@ -173,3 +215,10 @@ class OpenAIImageProvider(ImageProvider):
             response = await http.get(url)
             response.raise_for_status()
             return response.content
+
+
+def _file_from_reference(reference: ImageReference) -> tuple[str, io.BytesIO, str]:
+    buffer = io.BytesIO(reference.data)
+    filename = reference.filename or "product.png"
+    mime = reference.mime_type or "image/png"
+    return filename, buffer, mime

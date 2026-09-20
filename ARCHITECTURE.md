@@ -8,7 +8,7 @@ obrigava o usuario a entender um pipeline de redacao.
 
 O fluxo diario agora e um unico pedido em `/criar`:
 
-1. item (opcional, obrigatorio so para vender) + objetivo (`SELL` / `ATTRACT` / `BRAND`)
+1. produto (cadastrar novo ou selecionar um existente, com foto) + objetivo (`SELL` / `ATTRACT` / `BRAND`)
 2. ate tres perguntas determinísticas
 3. um job `CONTENT_CREATION` com stages `ideia` → `roteiro` → `imagem` → `finalizando`
 4. preview para Aprovar, Refazer ou Agendar
@@ -31,7 +31,8 @@ Nao ha seletor de apresentadora nem de tom na UI.
 | Rota | Papel |
 | --- | --- |
 | `/inicio` | Atalho. Monta `/criar?product=&objective=`. Nao e wizard. |
-| `/criar` | Unica maquina de estados do pedido. |
+| `/criar` | Cadastro ou selecao do produto, foto e objetivo. Unica maquina do pedido. |
+| `/settings/negocio/produtos` | Editar, trocar foto e excluir produtos ja cadastrados. |
 | `/contents` | Biblioteca em abas (em criacao, para aprovar, agendados, publicados). |
 | `/contents/[id]` | Preview, Aprovar/Refazer/Agendar; editor em Ajustar; resto no menu `...`. |
 | `/calendar` | Semana por padrao, mes opcional. |

@@ -92,6 +92,7 @@ async def test_questions_ask_price_when_missing(user_with_business: ApiUser) -> 
     ).json()
     keys = [item["key"] for item in questions]
     assert "price" in keys
+    assert "product_photo" not in keys
     assert len(questions) <= 3
 
 

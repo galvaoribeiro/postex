@@ -12,6 +12,15 @@ from typing import ClassVar
 
 
 @dataclass(frozen=True, slots=True)
+class ImageReference:
+    """Bytes da foto de produto usada para condicionar o still."""
+
+    data: bytes
+    mime_type: str
+    filename: str
+
+
+@dataclass(frozen=True, slots=True)
 class ImagePrompt:
     """Pedido de still comercial, ja com restricoes de seguranca."""
 
@@ -19,6 +28,7 @@ class ImagePrompt:
     negative_prompt: str = ""
     size: str = "1024x1792"
     seed: int = 0
+    references: tuple[ImageReference, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +41,7 @@ class GeneratedImage:
     model: str
     prompt: str
     latency_ms: int
+    used_reference: bool = False
 
     def metadata(self) -> dict[str, object]:
         return {
@@ -40,6 +51,7 @@ class GeneratedImage:
             "height": self.height,
             "latency_ms": self.latency_ms,
             "mime_type": self.mime_type,
+            "used_reference": self.used_reference,
         }
 
 

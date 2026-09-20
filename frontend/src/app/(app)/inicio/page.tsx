@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Sparkles, Store, Tag } from "lucide-react";
+import { Plus, Store, Tag } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -32,7 +32,6 @@ export default function InicioPage() {
   const weekEnd = addDays(weekStart, 6);
 
   const [item, setItem] = useState<QuickCreateItem | null>(null);
-  const [brandOnly, setBrandOnly] = useState(true);
   const [objective, setObjective] = useState<ContentObjective | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -75,22 +74,19 @@ export default function InicioPage() {
 
   function selectItem(next: QuickCreateItem) {
     setItem(next);
-    setBrandOnly(false);
   }
 
   function handleCreate() {
+    if (!item) {
+      toast.error("Escolha um produto ou cadastre um novo em Criar.");
+      return;
+    }
     if (!objective) {
       toast.error("Escolha um objetivo.");
       return;
     }
-    if (objective === "SELL" && !item) {
-      toast.error("Para vender, escolha um produto ou servico.");
-      return;
-    }
     const params = new URLSearchParams({ objective });
-    if (item && !brandOnly) {
-      params.set(item.kind === "product" ? "product" : "service", item.id);
-    }
+    params.set(item.kind === "product" ? "product" : "service", item.id);
     router.push(`/criar?${params.toString()}`);
   }
 
@@ -100,21 +96,18 @@ export default function InicioPage() {
     <div className="space-y-8">
       <PageHeader
         title={`Ola, ${data.business_name}`}
-        description="Escolha o que divulgar. O pedido completo acontece em Criar."
+        description="Escolha o produto e o objetivo. O cadastro de um produto novo acontece em Criar."
       />
 
       <section>
-        <h2 className="text-sm font-semibold text-foreground">O que vamos divulgar hoje?</h2>
+        <h2 className="text-sm font-semibold text-foreground">Qual produto vamos divulgar?</h2>
         <div className="mt-3 flex flex-wrap gap-2">
           <Chip
-            active={brandOnly}
-            icon={<Sparkles className="h-3.5 w-3.5" />}
-            onClick={() => {
-              setBrandOnly(true);
-              setItem(null);
-            }}
+            active={false}
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => router.push("/criar")}
           >
-            So a marca
+            Novo produto
           </Chip>
           {(data.quick_create ?? []).map((entry) => (
             <Chip
@@ -134,6 +127,11 @@ export default function InicioPage() {
             </Chip>
           ))}
         </div>
+        {(data.quick_create ?? []).length === 0 && (
+          <p className="mt-3 text-sm text-foreground/45">
+            Ainda nao ha produto cadastrado. Use Novo produto para comecar em Criar.
+          </p>
+        )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {OBJECTIVES.map((entry) => (

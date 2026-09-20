@@ -7,12 +7,13 @@ fal; o restante da aplicacao recebe `GeneratedImage`.
 from __future__ import annotations
 
 import asyncio
+import base64
 import time
 from typing import Any, ClassVar
 
 import httpx
 
-from app.ai.image.base import GeneratedImage, ImagePrompt, ImageProvider
+from app.ai.image.base import GeneratedImage, ImagePrompt, ImageProvider, ImageReference
 from app.ai.image.prompt import parse_size
 from app.core.config import Settings
 from app.core.config import settings as default_settings
@@ -45,29 +46,10 @@ class FluxImageProvider(ImageProvider):
         return self.settings.FAL_IMAGE_MODEL
 
     async def generate(self, request: ImagePrompt) -> GeneratedImage:
-        model = self.default_model.strip().lstrip("/")
+        model, payload = self._build_payload(request)
         started = time.perf_counter()
         width, height = parse_size(request.size)
-        prompt = request.prompt
-        # Nao concatenar Avoid no final: o T5 do Flux so atende ~512 tokens
-        # e o CLIP ~77. Negativo no fim empurra produto/negocio para fora.
-
-        schnell = "schnell" in model.lower()
         safety_on = self.settings.FAL_ENABLE_SAFETY_CHECKER
-        payload: dict[str, Any] = {
-            "prompt": prompt,
-            "image_size": {"width": width, "height": height},
-            "num_images": 1,
-            "output_format": "png",
-            # Nomes oficiais: https://fal.ai/docs/documentation/model-apis/model-arguments#enable_safety_checker
-            "enable_safety_checker": safety_on,
-            "enable_safety_checks": safety_on,
-            "num_inference_steps": 4 if schnell else 28,
-        }
-        if not schnell:
-            payload["guidance_scale"] = 3.5
-        if request.seed:
-            payload["seed"] = abs(int(request.seed)) % (2**31)
 
         timeout = httpx.Timeout(20.0, read=float(self.settings.FAL_TIMEOUT_SECONDS))
         try:
@@ -92,6 +74,7 @@ class FluxImageProvider(ImageProvider):
             model=model,
             latency_ms=latency_ms,
             safety_checker=safety_on,
+            used_reference=bool(request.references),
         )
         return GeneratedImage(
             data=raw,
@@ -102,7 +85,49 @@ class FluxImageProvider(ImageProvider):
             model=model,
             prompt=request.prompt,
             latency_ms=latency_ms,
+            used_reference=bool(request.references),
         )
+
+    def _build_payload(self, request: ImagePrompt) -> tuple[str, dict[str, Any]]:
+        if request.references:
+            return self._kontext_payload(request)
+        return self._text_to_image_payload(request)
+
+    def _text_to_image_payload(self, request: ImagePrompt) -> tuple[str, dict[str, Any]]:
+        model = self.default_model.strip().lstrip("/")
+        width, height = parse_size(request.size)
+        schnell = "schnell" in model.lower()
+        safety_on = self.settings.FAL_ENABLE_SAFETY_CHECKER
+        payload: dict[str, Any] = {
+            "prompt": request.prompt,
+            "image_size": {"width": width, "height": height},
+            "num_images": 1,
+            "output_format": "png",
+            # Nomes oficiais: https://fal.ai/docs/documentation/model-apis/model-arguments#enable_safety_checker
+            "enable_safety_checker": safety_on,
+            "enable_safety_checks": safety_on,
+            "num_inference_steps": 4 if schnell else 28,
+        }
+        if not schnell:
+            payload["guidance_scale"] = 3.5
+        if request.seed:
+            payload["seed"] = abs(int(request.seed)) % (2**31)
+        return model, payload
+
+    def _kontext_payload(self, request: ImagePrompt) -> tuple[str, dict[str, Any]]:
+        model = self.settings.FAL_KONTEXT_MODEL.strip().lstrip("/")
+        reference = request.references[0]
+        payload: dict[str, Any] = {
+            "prompt": request.prompt,
+            "image_url": _data_uri(reference),
+            "output_format": "png",
+            "num_images": 1,
+            "aspect_ratio": _aspect_ratio(request.size),
+            "guidance_scale": 3.5,
+        }
+        if request.seed:
+            payload["seed"] = abs(int(request.seed)) % (2**31)
+        return model, payload
 
     async def _run(
         self, http: httpx.AsyncClient, model: str, payload: dict[str, Any]
@@ -149,6 +174,17 @@ class FluxImageProvider(ImageProvider):
         if not data:
             raise AIProviderError("A imagem do Flux veio vazia.")
         return data
+
+
+def _data_uri(reference: ImageReference) -> str:
+    encoded = base64.b64encode(reference.data).decode("ascii")
+    mime = reference.mime_type or "image/png"
+    return f"data:{mime};base64,{encoded}"
+
+
+def _aspect_ratio(size: str) -> str:
+    width, height = parse_size(size)
+    return "9:16" if height > width else "1:1"
 
 
 def _fal_message(response: httpx.Response, fallback: str) -> str:

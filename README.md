@@ -139,9 +139,14 @@ Veja `.env.example` para a lista completa e comentada. Pontos importantes:
 - `IMAGE_PROVIDER` segue `AI_PROVIDER` se vazio. Use `mock` para stills locais
   mesmo com texto real (sem gastar credito de imagem). Still real: `openai` +
   `OPENAI_IMAGE_MODEL` (padrao `gpt-image-2`) ou `flux` + `FAL_KEY` (fal.ai).
+  Se o item focado tiver uma foto `READY`, o still e condicionado a esses pixels:
+  OpenAI usa `images.edit`; Flux usa `FAL_KONTEXT_MODEL` (padrao
+  `fal-ai/flux-pro/kontext`). Sem foto, o caminho permanece text-to-image
+  (`images.generate` / `FAL_IMAGE_MODEL`).
 - O visual base da capa vive em `backend/app/ai/image/prompt.py` (`CREATIVE_BRIEF`).
   Produto, marca, local e cena da peca entram automaticamente no prompt; nao ha
-  seletor de tom ou apresentadora na UI.
+  seletor de tom ou apresentadora na UI. O produto e a foto dele sao escolhidos
+  em `/criar`; Configuracoes → Produtos so edita o que ja existe.
 - `AI_EXECUTION_MODE`: `celery` (producao, exige worker) ou `inline` (executa no
   processo da API, util para dev/testes sem worker).
 - Nenhuma chave de IA e exposta ao frontend; todas as chamadas de IA passam pelo

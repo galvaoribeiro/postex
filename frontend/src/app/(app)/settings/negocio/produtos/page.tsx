@@ -2,7 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Pencil, Plus, Trash2 } from "lucide-react";
+import { Boxes, ImagePlus, Pencil, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -14,12 +15,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FieldError, Input, Label, Textarea } from "@/components/ui/input";
+import { FieldError, FieldHint, Input, Label, Textarea } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
 import { TagInput } from "@/components/ui/tag-input";
+import { assetsApi, uploadLinkedImage } from "@/lib/api/assets";
 import { productsApi } from "@/lib/api/catalog";
 import { ApiError } from "@/lib/api/client";
-import type { ProductPayload, ProductRead } from "@/lib/api/types";
+import type { AssetRead, ProductPayload, ProductRead } from "@/lib/api/types";
 import { queryKeys } from "@/lib/query-keys";
 import { formatCurrency } from "@/lib/utils";
 
@@ -38,32 +40,53 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+function photoUrlFor(assets: AssetRead[] | undefined, productId: string): string | null {
+  return (
+    assets?.find(
+      (asset) =>
+        asset.product_id === productId &&
+        asset.status === "READY" &&
+        asset.mime_type.startsWith("image/") &&
+        asset.url
+    )?.url ?? null
+  );
+}
+
 export default function ProductsPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { data: products, isLoading } = useQuery({
     queryKey: queryKeys.products,
     queryFn: () => productsApi.list(),
+  });
+  const { data: assets } = useQuery({
+    queryKey: queryKeys.assets({ kind: "PRODUCT_PHOTO" }),
+    queryFn: () => assetsApi.list({ kind: "PRODUCT_PHOTO", status: "READY" }),
   });
 
   const [editing, setEditing] = useState<ProductRead | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleting, setDeleting] = useState<ProductRead | null>(null);
 
-  const createMutation = useMutation({
-    mutationFn: productsApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.products });
-      toast.success("Produto criado.");
-      setFormOpen(false);
-    },
-    onError: (error: unknown) => toast.error(error instanceof ApiError ? error.message : "Erro ao criar produto."),
-  });
-
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<ProductPayload> }) =>
-      productsApi.update(id, payload),
+    mutationFn: async ({
+      id,
+      payload,
+      photo,
+    }: {
+      id: string;
+      payload: Partial<ProductPayload>;
+      photo: File | null;
+    }) => {
+      const updated = await productsApi.update(id, payload);
+      if (photo) {
+        await uploadLinkedImage(photo, { kind: "PRODUCT_PHOTO", productId: id });
+      }
+      return updated;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.products });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
       toast.success("Produto atualizado.");
       setFormOpen(false);
     },
@@ -74,15 +97,11 @@ export default function ProductsPage() {
     mutationFn: (id: string) => productsApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.products });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
       toast.success("Produto removido.");
       setDeleting(null);
     },
   });
-
-  function openCreate() {
-    setEditing(null);
-    setFormOpen(true);
-  }
 
   function openEdit(product: ProductRead) {
     setEditing(product);
@@ -93,12 +112,7 @@ export default function ProductsPage() {
     <div>
       <PageHeader
         title="Produtos"
-        description="O catalogo que o Motor de Conteudo usa para gerar ideias e conteudos especificos."
-        actions={
-          <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
-            Novo produto
-          </Button>
-        }
+        description="Edite, troque a foto ou exclua produtos ja cadastrados. O cadastro novo acontece em Criar."
       />
 
       {isLoading ? (
@@ -107,61 +121,72 @@ export default function ProductsPage() {
         <EmptyState
           icon={Boxes}
           title="Nenhum produto cadastrado"
-          description="Cadastre seus produtos para que a IA crie conteudos especificos sobre eles."
-          action={<Button onClick={openCreate}>Cadastrar produto</Button>}
+          description="Cadastre o produto em Criar, com a foto. Depois voce edita por aqui."
+          action={<Button onClick={() => router.push("/criar")}>Ir para Criar</Button>}
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((product) => (
-            <Card key={product.id}>
-              <CardContent className="space-y-3 p-5">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-foreground">{product.name}</p>
-                    {product.category && <p className="text-xs text-foreground/45">{product.category}</p>}
-                  </div>
-                  <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(product)} aria-label="Editar">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => setDeleting(product)}
-                      aria-label="Excluir"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                {product.description && (
-                  <p className="line-clamp-2 text-sm text-foreground/60">{product.description}</p>
-                )}
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-brand-700">
-                    {formatCurrency(product.price, product.currency)}
-                  </span>
-                  {!product.is_active && (
-                    <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs text-foreground/50">
-                      Inativo
-                    </span>
+          {products.map((product) => {
+            const photoUrl = photoUrlFor(assets, product.id);
+            return (
+              <Card key={product.id}>
+                <CardContent className="space-y-3 p-5">
+                  {photoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={photoUrl}
+                      alt={product.name}
+                      className="h-36 w-full rounded-xl object-cover"
+                    />
                   )}
-                </div>
-                {product.highlights.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {product.highlights.map((highlight) => (
-                      <span
-                        key={highlight}
-                        className="rounded-full bg-brand-50 px-2 py-0.5 text-xs text-brand-700"
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-foreground">{product.name}</p>
+                      {product.category && <p className="text-xs text-foreground/45">{product.category}</p>}
+                    </div>
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => openEdit(product)} aria-label="Editar">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setDeleting(product)}
+                        aria-label="Excluir"
                       >
-                        {highlight}
-                      </span>
-                    ))}
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  {product.description && (
+                    <p className="line-clamp-2 text-sm text-foreground/60">{product.description}</p>
+                  )}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-brand-700">
+                      {formatCurrency(product.price, product.currency)}
+                    </span>
+                    {!product.is_active && (
+                      <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs text-foreground/50">
+                        Inativo
+                      </span>
+                    )}
+                  </div>
+                  {product.highlights.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {product.highlights.map((highlight) => (
+                        <span
+                          key={highlight}
+                          className="rounded-full bg-brand-50 px-2 py-0.5 text-xs text-brand-700"
+                        >
+                          {highlight}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -169,19 +194,17 @@ export default function ProductsPage() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         product={editing}
-        loading={createMutation.isPending || updateMutation.isPending}
-        onSubmit={(values) => {
+        photoUrl={editing ? photoUrlFor(assets, editing.id) : null}
+        loading={updateMutation.isPending}
+        onSubmit={(values, photo) => {
+          if (!editing) return;
           const payload: ProductPayload = {
             ...values,
             description: values.description || null,
             category: values.category || null,
             price: values.price === "" || values.price === undefined ? null : Number(values.price),
           };
-          if (editing) {
-            updateMutation.mutate({ id: editing.id, payload });
-          } else {
-            createMutation.mutate(payload);
-          }
+          updateMutation.mutate({ id: editing.id, payload, photo });
         }}
       />
 
@@ -203,15 +226,19 @@ function ProductFormDialog({
   open,
   onClose,
   product,
+  photoUrl,
   onSubmit,
   loading,
 }: {
   open: boolean;
   onClose: () => void;
   product: ProductRead | null;
-  onSubmit: (values: FormValues) => void;
+  photoUrl: string | null;
+  onSubmit: (values: FormValues, photo: File | null) => void;
   loading: boolean;
 }) {
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -225,6 +252,8 @@ function ProductFormDialog({
 
   useEffect(() => {
     if (open) {
+      setPhoto(null);
+      setPreview(null);
       reset(
         product
           ? {
@@ -241,23 +270,64 @@ function ProductFormDialog({
     }
   }, [open, product, reset]);
 
+  useEffect(() => {
+    if (!photo) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(photo);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
+
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      title={product ? "Editar produto" : "Novo produto"}
+      title="Editar produto"
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={loading}>
+          <Button onClick={handleSubmit((values) => onSubmit(values, photo))} loading={loading}>
             Salvar
           </Button>
         </>
       }
     >
-      <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
+      <form className="space-y-4" onSubmit={handleSubmit((values) => onSubmit(values, photo))}>
+        <div>
+          <Label htmlFor="p_photo">Foto do produto</Label>
+          <label
+            htmlFor="p_photo"
+            className="mt-1 flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border-subtle px-3 py-3 text-sm hover:border-brand-300"
+          >
+            {preview || photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={preview || photoUrl || ""}
+                alt=""
+                className="h-14 w-14 rounded-lg object-cover"
+              />
+            ) : (
+              <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-surface-muted text-foreground/45">
+                <ImagePlus className="h-5 w-5" />
+              </span>
+            )}
+            <span className="text-foreground/70">
+              {photo ? photo.name : "Trocar foto (usada na capa em Criar)"}
+            </span>
+          </label>
+          <input
+            id="p_photo"
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={(event) => setPhoto(event.target.files?.[0] ?? null)}
+          />
+          <FieldHint>Altere nome, preco e foto dos produtos ja cadastrados. Novos produtos nascem em Criar.</FieldHint>
+        </div>
         <div>
           <Label htmlFor="p_name">Nome</Label>
           <Input id="p_name" {...register("name")} />

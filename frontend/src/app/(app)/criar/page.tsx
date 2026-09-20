@@ -5,13 +5,14 @@ import {
   ArrowLeft,
   Calendar,
   Check,
+  ImagePlus,
+  Plus,
   RefreshCw,
-  Sparkles,
   Store,
   Tag,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { toast } from "sonner";
 
 import { ContentPreview, StageChecklist } from "@/components/domain/content-preview";
@@ -22,11 +23,12 @@ import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/input";
 import { PageSpinner } from "@/components/ui/spinner";
 import { Progress } from "@/components/ui/progress";
-import { assetsApi, readImageDimensions, uploadFileToSignedUrl } from "@/lib/api/assets";
+import { assetsApi, uploadLinkedImage } from "@/lib/api/assets";
 import { productsApi, servicesApi } from "@/lib/api/catalog";
 import { ApiError } from "@/lib/api/client";
 import { contentsApi } from "@/lib/api/contents";
 import type {
+  AssetRead,
   ContentObjective,
   ContentRead,
   CreationQuestion,
@@ -89,6 +91,10 @@ function CriarFlow() {
     queryKey: queryKeys.services,
     queryFn: () => servicesApi.list(true),
   });
+  const { data: catalogAssets, isSuccess: assetsReady } = useQuery({
+    queryKey: queryKeys.assets({ status: "READY" }),
+    queryFn: () => assetsApi.list({ status: "READY" }),
+  });
 
   const [step, setStep] = useState<Step>("choice");
   const [objective, setObjective] = useState<ContentObjective | null>(() =>
@@ -103,6 +109,10 @@ function CriarFlow() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [draftAnswer, setDraftAnswer] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [creatingProduct, setCreatingProduct] = useState(false);
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductPrice, setNewProductPrice] = useState("");
+  const [newProductPhoto, setNewProductPhoto] = useState<File | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [jobStatus, setJobStatus] = useState<JobRead["status"]>("PENDING");
@@ -120,11 +130,16 @@ function CriarFlow() {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const catalogReady = products !== undefined && services !== undefined;
+  const catalogReady = products !== undefined && services !== undefined && assetsReady;
   const resolvedProductId =
     productId && products && !products.some((item) => item.id === productId) ? null : productId;
   const resolvedServiceId =
     serviceId && services && !services.some((item) => item.id === serviceId) ? null : serviceId;
+  const selectedHasPhoto = itemHasReadyImage(
+    catalogAssets,
+    resolvedProductId,
+    resolvedServiceId
+  );
 
   const currentQuestion = questions[questionIndex] ?? null;
   const selectedProduct = products?.find((item) => item.id === resolvedProductId) ?? null;
@@ -143,7 +158,8 @@ function CriarFlow() {
     !stayOnChoice &&
     catalogReady &&
     Boolean(objective) &&
-    (objective !== "SELL" || Boolean(resolvedProductId || resolvedServiceId));
+    Boolean(resolvedProductId || resolvedServiceId) &&
+    selectedHasPhoto;
 
   const bootQuestions = useQuery({
     queryKey: queryKeys.creationQuestions({
@@ -208,6 +224,7 @@ function CriarFlow() {
         queryClient.invalidateQueries({ queryKey: queryKeys.products });
         queryClient.invalidateQueries({ queryKey: queryKeys.services });
         queryClient.invalidateQueries({ queryKey: queryKeys.business });
+        queryClient.invalidateQueries({ queryKey: ["assets"] });
         setContent(created);
         setProgress(100);
         setJobStatus("COMPLETED");
@@ -266,61 +283,108 @@ function CriarFlow() {
   );
 
   function selectProduct(id: string) {
+    setCreatingProduct(false);
     setProductId(id);
     setServiceId(null);
+    setPhotoFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function selectService(id: string) {
+    setCreatingProduct(false);
     setServiceId(id);
     setProductId(null);
+    setPhotoFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  function clearItem() {
+  function startCreateProduct() {
+    setCreatingProduct(true);
     setProductId(null);
     setServiceId(null);
+    setPhotoFile(null);
+    setNewProductName("");
+    setNewProductPrice("");
+    setNewProductPhoto(null);
   }
 
-  function handleContinueChoice() {
+  async function handleCreateProduct() {
+    const name = newProductName.trim();
+    if (name.length < 2) {
+      toast.error("Informe o nome do produto.");
+      return;
+    }
+    if (!newProductPhoto) {
+      toast.error("Anexe a foto do produto. Ela entra na capa gerada.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const priceRaw = newProductPrice.trim().replace(",", ".");
+      const created = await productsApi.create({
+        name,
+        price: priceRaw && !Number.isNaN(Number(priceRaw)) ? Number(priceRaw) : null,
+        currency: "BRL",
+        highlights: [],
+        is_active: true,
+      });
+      await uploadLinkedImage(newProductPhoto, {
+        kind: "PRODUCT_PHOTO",
+        productId: created.id,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      setProductId(created.id);
+      setServiceId(null);
+      setCreatingProduct(false);
+      setNewProductName("");
+      setNewProductPrice("");
+      setNewProductPhoto(null);
+      setPhotoFile(null);
+      toast.success("Produto cadastrado. Ele entra neste post.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Nao foi possivel cadastrar o produto.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleContinueChoice() {
     if (!objective) {
       toast.error("Escolha um objetivo.");
       return;
     }
-    if (objective === "SELL" && !productId && !serviceId) {
-      toast.error("Para vender, escolha um produto ou servico.");
+    if (creatingProduct) {
+      toast.error("Cadastre o produto ou escolha um ja existente.");
       return;
     }
+    if (!resolvedProductId && !resolvedServiceId) {
+      toast.error("Escolha um produto ou cadastre um novo. Ele entra na geracao.");
+      return;
+    }
+    if (!selectedHasPhoto) {
+      if (!photoFile) {
+        toast.error("Anexe a foto do produto. Ela entra na capa gerada.");
+        return;
+      }
+      setBusy(true);
+      try {
+        await uploadLinkedImage(photoFile, {
+          kind: "PRODUCT_PHOTO",
+          productId: resolvedProductId,
+          serviceId: resolvedServiceId,
+        });
+        queryClient.invalidateQueries({ queryKey: ["assets"] });
+        setPhotoFile(null);
+      } catch (err) {
+        setBusy(false);
+        toast.error(err instanceof Error ? err.message : "Falha ao enviar a foto.");
+        return;
+      }
+      setBusy(false);
+    }
     void begin(objective, resolvedProductId, resolvedServiceId);
-  }
-
-  async function uploadPhotoIfNeeded(): Promise<boolean> {
-    if (!currentQuestion || currentQuestion.key !== "product_photo") return true;
-    if (draftAnswer !== "upload_now") return true;
-    if (!photoFile) {
-      toast.error("Selecione a foto ou pule esta pergunta.");
-      return false;
-    }
-    try {
-      const ticket = await assetsApi.createUploadUrl({
-        filename: photoFile.name,
-        mime_type: photoFile.type || "image/jpeg",
-        size_bytes: photoFile.size,
-        kind: "PRODUCT_PHOTO",
-        product_id: resolvedProductId,
-        service_id: resolvedServiceId,
-      });
-      await uploadFileToSignedUrl(ticket, photoFile);
-      const dimensions = await readImageDimensions(photoFile);
-      await assetsApi.confirm(ticket.asset_id, {
-        size_bytes: photoFile.size,
-        width: dimensions?.width,
-        height: dimensions?.height,
-        analyze: false,
-      });
-      return true;
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao enviar a foto.");
-      return false;
-    }
   }
 
   async function finishQuestions(nextAnswers: Record<string, string>) {
@@ -348,11 +412,6 @@ function CriarFlow() {
       return;
     }
     setBusy(true);
-    const uploaded = await uploadPhotoIfNeeded();
-    if (!uploaded) {
-      setBusy(false);
-      return;
-    }
     const nextAnswers = { ...answers, [currentQuestion.key]: draftAnswer.trim() };
     setAnswers(nextAnswers);
     const isLast = questionIndex >= questions.length - 1;
@@ -361,8 +420,6 @@ function CriarFlow() {
     } else {
       setQuestionIndex((index) => index + 1);
       setDraftAnswer("");
-      setPhotoFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
     setBusy(false);
   }
@@ -378,8 +435,6 @@ function CriarFlow() {
       }
       setQuestionIndex((index) => index + 1);
       setDraftAnswer("");
-      setPhotoFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     } finally {
       setBusy(false);
     }
@@ -404,7 +459,10 @@ function CriarFlow() {
   }
 
   const canContinueChoice =
-    Boolean(objective) && (objective !== "SELL" || Boolean(resolvedProductId || resolvedServiceId));
+    Boolean(objective) &&
+    !creatingProduct &&
+    Boolean(resolvedProductId || resolvedServiceId) &&
+    (selectedHasPhoto || Boolean(photoFile));
   const bootingFromQuery =
     bootReady && step === "choice" && (bootQuestions.isPending || skipToQuestions);
 
@@ -421,7 +479,7 @@ function CriarFlow() {
     <div>
       <PageHeader
         title="Criar"
-        description="Produto, objetivo e ate tres perguntas. Um job, um preview."
+        description="Escolha ou cadastre o produto, anexe a foto e defina o objetivo. Esse produto entra na geracao."
       />
 
       {bootingFromQuery && <PageSpinner label="Preparando..." />}
@@ -433,13 +491,27 @@ function CriarFlow() {
           serviceId={resolvedServiceId}
           products={products ?? []}
           services={services ?? []}
+          assets={catalogAssets ?? []}
+          creatingProduct={creatingProduct}
+          newProductName={newProductName}
+          newProductPrice={newProductPrice}
+          newProductPhoto={newProductPhoto}
+          photoFile={photoFile}
+          fileInputRef={fileInputRef}
+          selectedHasPhoto={selectedHasPhoto}
           loading={!catalogReady || busy}
           canContinue={canContinueChoice}
           onObjective={setObjective}
           onSelectProduct={selectProduct}
           onSelectService={selectService}
-          onClearItem={clearItem}
-          onContinue={handleContinueChoice}
+          onStartCreateProduct={startCreateProduct}
+          onCancelCreateProduct={() => setCreatingProduct(false)}
+          onNewProductName={setNewProductName}
+          onNewProductPrice={setNewProductPrice}
+          onNewProductPhoto={setNewProductPhoto}
+          onPhoto={setPhotoFile}
+          onCreateProduct={() => void handleCreateProduct()}
+          onContinue={() => void handleContinueChoice()}
         />
       )}
 
@@ -449,12 +521,9 @@ function CriarFlow() {
           index={questionIndex}
           total={questions.length}
           draft={draftAnswer}
-          photoFile={photoFile}
-          fileInputRef={fileInputRef}
           busy={busy || isWatching}
           itemLabel={selectedProduct?.name ?? selectedService?.name ?? null}
           onDraft={setDraftAnswer}
-          onPhoto={setPhotoFile}
           onSkip={() => void handleQuestionSkip()}
           onNext={() => void handleQuestionNext()}
           onBack={() => {
@@ -465,7 +534,6 @@ function CriarFlow() {
             }
             setQuestionIndex((index) => index - 1);
             setDraftAnswer("");
-            setPhotoFile(null);
           }}
         />
       )}
@@ -539,18 +607,60 @@ function CriarFlow() {
   );
 }
 
+function itemHasReadyImage(
+  assets: AssetRead[] | undefined,
+  productId: string | null,
+  serviceId: string | null
+): boolean {
+  if (!assets || (!productId && !serviceId)) return false;
+  return assets.some((asset) => {
+    if (asset.status !== "READY" || !asset.mime_type.startsWith("image/")) return false;
+    if (productId && asset.product_id === productId) return true;
+    if (serviceId && asset.service_id === serviceId) return true;
+    return false;
+  });
+}
+
+function photoUrlFor(
+  assets: AssetRead[],
+  productId?: string | null,
+  serviceId?: string | null
+): string | null {
+  const match = assets.find((asset) => {
+    if (asset.status !== "READY" || !asset.url) return false;
+    if (productId && asset.product_id === productId) return true;
+    if (serviceId && asset.service_id === serviceId) return true;
+    return false;
+  });
+  return match?.url ?? null;
+}
+
 function ChoiceStep({
   objective,
   productId,
   serviceId,
   products,
   services,
+  assets,
+  creatingProduct,
+  newProductName,
+  newProductPrice,
+  newProductPhoto,
+  photoFile,
+  fileInputRef,
+  selectedHasPhoto,
   loading,
   canContinue,
   onObjective,
   onSelectProduct,
   onSelectService,
-  onClearItem,
+  onStartCreateProduct,
+  onCancelCreateProduct,
+  onNewProductName,
+  onNewProductPrice,
+  onNewProductPhoto,
+  onPhoto,
+  onCreateProduct,
   onContinue,
 }: {
   objective: ContentObjective | null;
@@ -558,16 +668,147 @@ function ChoiceStep({
   serviceId: string | null;
   products: ProductRead[];
   services: ServiceRead[];
+  assets: AssetRead[];
+  creatingProduct: boolean;
+  newProductName: string;
+  newProductPrice: string;
+  newProductPhoto: File | null;
+  photoFile: File | null;
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  selectedHasPhoto: boolean;
   loading: boolean;
   canContinue: boolean;
   onObjective: (value: ContentObjective) => void;
   onSelectProduct: (id: string) => void;
   onSelectService: (id: string) => void;
-  onClearItem: () => void;
+  onStartCreateProduct: () => void;
+  onCancelCreateProduct: () => void;
+  onNewProductName: (value: string) => void;
+  onNewProductPrice: (value: string) => void;
+  onNewProductPhoto: (file: File | null) => void;
+  onPhoto: (file: File | null) => void;
+  onCreateProduct: () => void;
   onContinue: () => void;
 }) {
+  const selectedPhotoUrl = photoUrlFor(assets, productId, serviceId);
+
   return (
     <div className="mx-auto max-w-2xl space-y-8">
+      <section>
+        <h2 className="text-sm font-semibold text-foreground">Qual produto vamos divulgar?</h2>
+        <p className="mt-1 text-sm text-foreground/55">
+          Cadastre um novo ou escolha um ja existente. Esse produto entra obrigatoriamente na
+          geracao. A foto e anexada aqui, nao depois.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <CatalogChip
+            active={creatingProduct}
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={onStartCreateProduct}
+          >
+            Novo produto
+          </CatalogChip>
+          {products.map((product) => (
+            <CatalogChip
+              key={product.id}
+              active={!creatingProduct && productId === product.id}
+              thumb={photoUrlFor(assets, product.id)}
+              icon={<Tag className="h-3.5 w-3.5" />}
+              onClick={() => onSelectProduct(product.id)}
+            >
+              {product.name}
+              {product.price != null ? ` · ${formatCurrency(product.price, product.currency)}` : ""}
+            </CatalogChip>
+          ))}
+        </div>
+        {services.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-foreground/45">
+              Ou um servico ja cadastrado
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {services.map((service) => (
+                <CatalogChip
+                  key={service.id}
+                  active={!creatingProduct && serviceId === service.id}
+                  thumb={photoUrlFor(assets, null, service.id)}
+                  icon={<Store className="h-3.5 w-3.5" />}
+                  onClick={() => onSelectService(service.id)}
+                >
+                  {service.name}
+                </CatalogChip>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {creatingProduct && (
+          <div className="mt-4 space-y-3 rounded-2xl border border-brand-200 bg-brand-50/40 p-4">
+            <p className="text-sm font-medium text-foreground">Cadastrar produto</p>
+            <div>
+              <Label htmlFor="new-product-name">Nome</Label>
+              <Input
+                id="new-product-name"
+                value={newProductName}
+                onChange={(event) => onNewProductName(event.target.value)}
+                placeholder="Ex.: Vestido midi de linho"
+              />
+            </div>
+            <div>
+              <Label htmlFor="new-product-price">Preco (opcional)</Label>
+              <Input
+                id="new-product-price"
+                inputMode="decimal"
+                value={newProductPrice}
+                onChange={(event) => onNewProductPrice(event.target.value)}
+                placeholder="Ex.: 199,90"
+              />
+            </div>
+            <PhotoField
+              id="new-product-photo"
+              label="Foto do produto"
+              hint="Obrigatorio. Esta foto e a referencia da capa gerada."
+              file={newProductPhoto}
+              onChange={onNewProductPhoto}
+            />
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={onCancelCreateProduct} disabled={loading}>
+                Cancelar
+              </Button>
+              <Button onClick={onCreateProduct} loading={loading} className="flex-1">
+                Cadastrar e usar neste post
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!creatingProduct && (productId || serviceId) && !selectedHasPhoto && (
+          <div className="mt-4 rounded-2xl border border-dashed border-brand-300 bg-brand-50/30 p-4">
+            <PhotoField
+              id="selected-product-photo"
+              label="Foto deste produto"
+              hint="Ainda nao tem foto. Anexe agora: ela entra na capa gerada."
+              file={photoFile}
+              inputRef={fileInputRef}
+              previewUrl={selectedPhotoUrl}
+              onChange={onPhoto}
+            />
+          </div>
+        )}
+
+        {!creatingProduct && selectedHasPhoto && selectedPhotoUrl && (
+          <p className="mt-3 flex items-center gap-2 text-sm text-foreground/55">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={selectedPhotoUrl}
+              alt=""
+              className="h-10 w-10 rounded-lg object-cover"
+            />
+            Foto do produto pronta. Ela entra na capa.
+          </p>
+        )}
+      </section>
+
       <section>
         <h2 className="text-sm font-semibold text-foreground">Qual o objetivo?</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -590,54 +831,6 @@ function ChoiceStep({
         </div>
       </section>
 
-      <section>
-        <h2 className="text-sm font-semibold text-foreground">O que vamos divulgar?</h2>
-        <p className="mt-1 text-sm text-foreground/55">
-          {objective === "SELL"
-            ? "Obrigatorio para vender. Escolha um produto ou servico."
-            : "Opcional. Sem item, o Motor fala da marca como um todo."}
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {objective !== "SELL" && (
-            <CatalogChip
-              active={!productId && !serviceId}
-              icon={<Sparkles className="h-3.5 w-3.5" />}
-              onClick={onClearItem}
-            >
-              So a marca
-            </CatalogChip>
-          )}
-          {products.map((product) => (
-            <CatalogChip
-              key={product.id}
-              active={productId === product.id}
-              icon={<Tag className="h-3.5 w-3.5" />}
-              onClick={() => onSelectProduct(product.id)}
-            >
-              {product.name}
-              {product.price != null ? ` · ${formatCurrency(product.price, product.currency)}` : ""}
-            </CatalogChip>
-          ))}
-          {services.map((service) => (
-            <CatalogChip
-              key={service.id}
-              active={serviceId === service.id}
-              icon={<Store className="h-3.5 w-3.5" />}
-              onClick={() => onSelectService(service.id)}
-            >
-              {service.name}
-            </CatalogChip>
-          ))}
-        </div>
-        {products.length === 0 && services.length === 0 && (
-          <p className="mt-3 text-sm text-foreground/45">
-            Cadastre um produto ou servico em Configuracoes se quiser vender algo especifico.
-          </p>
-        )}
-      </section>
-
-      <p className="text-xs text-foreground/45">Estilo: Automatico. Sem escolher pilares editorial.</p>
-
       <Button size="lg" onClick={onContinue} disabled={!canContinue} loading={loading}>
         Continuar
       </Button>
@@ -645,14 +838,76 @@ function ChoiceStep({
   );
 }
 
+function PhotoField({
+  id,
+  label,
+  hint,
+  file,
+  previewUrl,
+  inputRef,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  file: File | null;
+  previewUrl?: string | null;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  onChange: (file: File | null) => void;
+}) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file) {
+      setObjectUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setObjectUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  const localPreview = objectUrl ?? previewUrl ?? null;
+  return (
+    <div>
+      <Label htmlFor={id}>{label}</Label>
+      <label
+        htmlFor={id}
+        className="mt-1 flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-brand-300 bg-surface px-3 py-3 text-sm hover:border-brand-400"
+      >
+        {localPreview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={localPreview} alt="" className="h-14 w-14 rounded-lg object-cover" />
+        ) : (
+          <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+            <ImagePlus className="h-5 w-5" />
+          </span>
+        )}
+        <span className="text-foreground/70">
+          {file ? file.name : "Escolher foto (JPG, PNG ou WebP)"}
+        </span>
+      </label>
+      <input
+        id={id}
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(event) => onChange(event.target.files?.[0] ?? null)}
+      />
+      <FieldHint>{hint}</FieldHint>
+    </div>
+  );
+}
+
 function CatalogChip({
   active,
   icon,
+  thumb,
   onClick,
   children,
 }: {
   active: boolean;
   icon: ReactNode;
+  thumb?: string | null;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -667,7 +922,12 @@ function CatalogChip({
           : "border-border-subtle text-foreground/70 hover:border-brand-200"
       )}
     >
-      {icon}
+      {thumb ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={thumb} alt="" className="h-5 w-5 rounded-full object-cover" />
+      ) : (
+        icon
+      )}
       {children}
     </button>
   );
@@ -678,12 +938,9 @@ function QuestionStep({
   index,
   total,
   draft,
-  photoFile,
-  fileInputRef,
   busy,
   itemLabel,
   onDraft,
-  onPhoto,
   onSkip,
   onNext,
   onBack,
@@ -692,12 +949,9 @@ function QuestionStep({
   index: number;
   total: number;
   draft: string;
-  photoFile: File | null;
-  fileInputRef: RefObject<HTMLInputElement | null>;
   busy: boolean;
   itemLabel: string | null;
   onDraft: (value: string) => void;
-  onPhoto: (file: File | null) => void;
   onSkip: () => void;
   onNext: () => void;
   onBack: () => void;
@@ -735,23 +989,6 @@ function QuestionStep({
                 {option.label}
               </button>
             ))}
-          </div>
-        )}
-
-        {question.key === "product_photo" && draft === "upload_now" && (
-          <div>
-            <Label htmlFor="creation-photo">Arquivo</Label>
-            <input
-              id="creation-photo"
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={(event) => onPhoto(event.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-foreground/70"
-            />
-            <FieldHint>
-              {photoFile ? photoFile.name : "JPG, PNG ou WebP. A foto fica vinculada ao item."}
-            </FieldHint>
           </div>
         )}
 
