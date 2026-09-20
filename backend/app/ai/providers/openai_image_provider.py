@@ -132,7 +132,6 @@ class OpenAIImageProvider(ImageProvider):
             provider=self.name,
             model=model,
             latency_ms=latency_ms,
-            presenter=request.presenter_id,
         )
         return GeneratedImage(
             data=raw,

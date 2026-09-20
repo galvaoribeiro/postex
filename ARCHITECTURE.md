@@ -15,15 +15,16 @@ O fluxo diario agora e um unico pedido em `/criar`:
 
 A geracao de ideias **nao foi apagada**. O worker ainda chama o motor de ideias
 por baixo, persiste uma ideia, produz o conteudo, gera um **still de capa**
-(apresentadora automatica + produto) e marca a ideia como usada.
+(negocio + produto/servico + cena da peca) e marca a ideia como usada.
 Quem quiser controle fino continua em **Configuracoes → Ideias**, sem polimento
 e fora do menu principal.
 
 O job `CONTENT_CREATION` expoe os stages `ideia` → `roteiro` → `imagem` →
-`finalizando`. A imagem passa por `ImageProvider` (`mock` ou `openai`),
-separado do provedor de texto. Personagens (Lara, Camila, Bianca) vivem em
-`app/ai/config/presenters.yaml` e sao escolhidas automaticamente — nao ha
-seletor no menu.
+`finalizando`. A imagem passa por `ImageProvider` (`mock`, `openai` ou `flux`),
+separado do provedor de texto. O estilo visual base fica em um unico bloco
+editavel (`CREATIVE_BRIEF` em `app/ai/image/prompt.py`); produto, marca,
+local e direcao visual da peca sao injetados automaticamente no prompt.
+Nao ha seletor de apresentadora nem de tom na UI.
 
 ## Mapa de telas
 

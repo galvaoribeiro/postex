@@ -4,8 +4,8 @@ SaaS de estrategia de conteudo com IA para pequenos negocios e autonomos mantere
 presenca consistente no Instagram. O produto nao gera posts genericos: ele entende
 o negocio (segmento, publico, diferenciais, produtos e servicos) e, a partir desse
 contexto, cria o **conteudo pronto para revisao** (roteiro, legenda, CTA, hashtags,
-cenas por formato) em um unico job, e um **still de capa** com apresentadora
-automatica (mock local ou OpenAI).
+cenas por formato) em um unico job, e um **still de capa** gerado a partir do
+contexto do negocio e da peca (mock local, OpenAI ou Flux).
 
 Fluxo do produto:
 
@@ -139,7 +139,9 @@ Veja `.env.example` para a lista completa e comentada. Pontos importantes:
 - `IMAGE_PROVIDER` segue `AI_PROVIDER` se vazio. Use `mock` para stills locais
   mesmo com texto real (sem gastar credito de imagem). Still real: `openai` +
   `OPENAI_IMAGE_MODEL` (padrao `gpt-image-2`) ou `flux` + `FAL_KEY` (fal.ai).
-  Tom ousado no Criar usa Flux automaticamente quando `FAL_KEY` existe.
+- O visual base da capa vive em `backend/app/ai/image/prompt.py` (`CREATIVE_BRIEF`).
+  Produto, marca, local e cena da peca entram automaticamente no prompt; nao ha
+  seletor de tom ou apresentadora na UI.
 - `AI_EXECUTION_MODE`: `celery` (producao, exige worker) ou `inline` (executa no
   processo da API, util para dev/testes sem worker).
 - Nenhuma chave de IA e exposta ao frontend; todas as chamadas de IA passam pelo

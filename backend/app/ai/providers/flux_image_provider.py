@@ -93,7 +93,6 @@ class FluxImageProvider(ImageProvider):
             provider=self.name,
             model=model,
             latency_ms=latency_ms,
-            presenter=request.presenter_id,
             safety_checker=safety_on,
         )
         return GeneratedImage(

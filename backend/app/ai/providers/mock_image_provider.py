@@ -1,7 +1,7 @@
 """Still deterministico, sem custo e sem rede.
 
-Gera um PNG com o nome da apresentadora, o produto e o negocio. Serve para o
-fluxo inteiro funcionar em desenvolvimento e nos testes.
+Gera um PNG com o prompt resumido e o negocio. Serve para o fluxo inteiro
+funcionar em desenvolvimento e nos testes.
 """
 
 from __future__ import annotations
@@ -15,17 +15,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.ai.image.base import GeneratedImage, ImagePrompt, ImageProvider
 from app.ai.image.prompt import parse_size
-from app.ai.presenters import get_presenter
-from app.core.exceptions import ValidationError
 
 MOCK_IMAGE_LATENCY_SECONDS = 0.05
-
-
-def _hex_to_rgb(value: str) -> tuple[int, int, int]:
-    cleaned = value.lstrip("#")
-    if len(cleaned) != 6:
-        return (124, 58, 237)
-    return tuple(int(cleaned[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> str:
@@ -75,14 +66,7 @@ class MockImageProvider(ImageProvider):
             width = int(width * scale)
             height = int(height * scale)
 
-        presenter = None
-        if request.presenter_id:
-            try:
-                presenter = get_presenter(request.presenter_id)
-            except ValidationError:
-                presenter = None
-
-        accent = _hex_to_rgb(presenter.accent if presenter else "#7c3aed")
+        accent = (124, 58, 237)
         image = Image.new("RGB", (width, height), accent)
         draw = ImageDraw.Draw(image)
         # Vinheta simples no terco inferior.
@@ -90,24 +74,24 @@ class MockImageProvider(ImageProvider):
         image.paste(overlay, (0, height // 2))
 
         font = ImageFont.load_default()
-        title = presenter.display_name if presenter else "Apresentadora"
-        subtitle = (
-            f"{presenter.age_range} · adulta ficticia" if presenter else "adulta ficticia"
+        draw.text((36, height // 2 + 28), "Still gerado", fill=(255, 255, 255), font=font)
+        draw.text(
+            (36, height // 2 + 52),
+            "Preview local · adulta ficticia",
+            fill=(220, 220, 230),
+            font=font,
         )
-        margin = 36
-        draw.text((margin, height // 2 + 28), title, fill=(255, 255, 255), font=font)
-        draw.text((margin, height // 2 + 52), subtitle, fill=(220, 220, 230), font=font)
 
-        body = _wrap(draw, request.prompt[:280], font, width - margin * 2)
+        body = _wrap(draw, request.prompt[:280], font, width - 72)
         draw.multiline_text(
-            (margin, height // 2 + 80),
+            (36, height // 2 + 80),
             body,
             fill=(200, 200, 210),
             font=font,
             spacing=4,
         )
         draw.text(
-            (margin, height - 48),
+            (36, height - 48),
             "MOCK · still gerado localmente",
             fill=(180, 180, 190),
             font=font,

@@ -33,7 +33,6 @@ import type {
   JobRead,
   ProductRead,
   ServiceRead,
-  VisualTone,
 } from "@/lib/api/types";
 import { useJobWatcher } from "@/lib/hooks/use-job-watcher";
 import { queryKeys } from "@/lib/query-keys";
@@ -68,23 +67,6 @@ function parseObjective(value: string | null): ContentObjective | null {
   return null;
 }
 
-function parseVisualTone(value: string | null): VisualTone {
-  return value === "DARING" ? "DARING" : "COMMERCIAL";
-}
-
-const VISUAL_TONES: { value: VisualTone; label: string; description: string }[] = [
-  {
-    value: "COMMERCIAL",
-    label: "Comercial",
-    description: "Capa de marca, roupa de loja, tom de feed.",
-  },
-  {
-    value: "DARING",
-    label: "Ousado",
-    description: "Lingerie ou praia, corpo a mostra, sem ser explicito.",
-  },
-];
-
 export default function CriarPage() {
   return (
     <Suspense fallback={<PageSpinner label="Carregando..." />}>
@@ -112,9 +94,6 @@ function CriarFlow() {
   const [objective, setObjective] = useState<ContentObjective | null>(() =>
     parseObjective(searchParams.get("objective"))
   );
-  const [visualTone, setVisualTone] = useState<VisualTone>(() =>
-    parseVisualTone(searchParams.get("visual"))
-  );
   const [productId, setProductId] = useState<string | null>(() => searchParams.get("product"));
   const [serviceId, setServiceId] = useState<string | null>(() =>
     searchParams.get("product") ? null : searchParams.get("service")
@@ -138,7 +117,6 @@ function CriarFlow() {
     productId: string | null;
     serviceId: string | null;
     answers: Record<string, string>;
-    visualTone: VisualTone;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -194,7 +172,6 @@ function CriarFlow() {
       productId: string | null;
       serviceId: string | null;
       answers: Record<string, string>;
-      visualTone: VisualTone;
     }) => {
       lastRequest.current = payload;
       setError(null);
@@ -209,7 +186,6 @@ function CriarFlow() {
           product_id: payload.productId || undefined,
           service_id: payload.serviceId || undefined,
           answers: payload.answers,
-          visual_tone: payload.visualTone,
         });
         const job = await watch(accepted.job_id, accepted.kind, {
           showToast: false,
@@ -271,7 +247,6 @@ function CriarFlow() {
             productId: nextProductId,
             serviceId: nextServiceId,
             answers: {},
-            visualTone,
           });
           return;
         }
@@ -287,7 +262,7 @@ function CriarFlow() {
         setBusy(false);
       }
     },
-    [generateContent, queryClient, visualTone]
+    [generateContent, queryClient]
   );
 
   function selectProduct(id: string) {
@@ -355,7 +330,6 @@ function CriarFlow() {
       productId: resolvedProductId,
       serviceId: resolvedServiceId,
       answers: nextAnswers,
-      visualTone,
     });
   }
 
@@ -465,8 +439,6 @@ function CriarFlow() {
           onSelectProduct={selectProduct}
           onSelectService={selectService}
           onClearItem={clearItem}
-          visualTone={visualTone}
-          onVisualTone={setVisualTone}
           onContinue={handleContinueChoice}
         />
       )}
@@ -580,8 +552,6 @@ function ChoiceStep({
   onSelectService,
   onClearItem,
   onContinue,
-  visualTone,
-  onVisualTone,
 }: {
   objective: ContentObjective | null;
   productId: string | null;
@@ -595,8 +565,6 @@ function ChoiceStep({
   onSelectService: (id: string) => void;
   onClearItem: () => void;
   onContinue: () => void;
-  visualTone: VisualTone;
-  onVisualTone: (value: VisualTone) => void;
 }) {
   return (
     <div className="mx-auto max-w-2xl space-y-8">
@@ -664,33 +632,6 @@ function ChoiceStep({
         {products.length === 0 && services.length === 0 && (
           <p className="mt-3 text-sm text-foreground/45">
             Cadastre um produto ou servico em Configuracoes se quiser vender algo especifico.
-          </p>
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold text-foreground">Como e a capa?</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {VISUAL_TONES.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => onVisualTone(item.value)}
-              className={cn(
-                "rounded-2xl border px-4 py-4 text-left transition-colors",
-                visualTone === item.value
-                  ? "border-brand-500 bg-brand-50"
-                  : "border-border-subtle bg-surface hover:border-brand-200"
-              )}
-            >
-              <p className="font-semibold text-foreground">{item.label}</p>
-              <p className="mt-1 text-xs leading-relaxed text-foreground/55">{item.description}</p>
-            </button>
-          ))}
-        </div>
-        {visualTone === "DARING" && (
-          <p className="mt-2 text-xs text-foreground/50">
-            Melhor para moda, praia e marca adulta. Pode limitar alcance no Instagram e no TikTok.
           </p>
         )}
       </section>

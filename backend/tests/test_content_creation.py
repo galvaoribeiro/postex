@@ -41,13 +41,11 @@ async def test_content_creation_job_produces_draft(
     assert result["content_id"]
     assert result["idea_id"]
     assert result["stages"] == ["ideia", "roteiro", "imagem", "finalizando"]
-    assert result["presenter"]["display_name"]
     assert result["image"]["provider"] == "mock"
 
     content = (await client.get(f"/api/v1/contents/{result['content_id']}")).json()
     assert content["status"] == "DRAFT"
     assert content["idea_id"] == result["idea_id"]
-    assert content["presenter_name"] == result["presenter"]["display_name"]
     covers = [link for link in content["assets"] if link["role"] == "COVER"]
     assert covers, "o still gerado deveria virar capa"
     assert covers[0]["asset"]["kind"] == "AI_GENERATED"
@@ -57,17 +55,6 @@ async def test_content_creation_job_produces_draft(
 
     idea = (await client.get(f"/api/v1/content-ideas/{result['idea_id']}")).json()
     assert idea["status"] == "USED"
-
-
-async def test_daring_cover_still_uses_mock_without_fal_key(
-    user_with_business: ApiUser,
-) -> None:
-    job = await _generate(
-        user_with_business.client, objective="BRAND", visual_tone="DARING"
-    )
-    assert job["status"] == "COMPLETED"
-    assert job["result"]["image"]["provider"] == "mock"
-    assert job["result"]["visual_tone"] == "DARING"
 
 
 async def test_sell_without_item_is_rejected(user_with_business: ApiUser) -> None:

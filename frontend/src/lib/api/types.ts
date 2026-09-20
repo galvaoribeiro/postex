@@ -6,8 +6,6 @@ export type ContentFormat = "REEL" | "IMAGE_POST" | "CAROUSEL" | "STORY";
 
 export type ContentObjective = "SELL" | "ATTRACT" | "BRAND";
 
-export type VisualTone = "COMMERCIAL" | "DARING";
-
 export type ContentStatus =
   | "IDEA"
   | "DRAFT"
@@ -251,7 +249,6 @@ export interface ContentRead {
   current_version: number;
   created_at: string;
   updated_at: string;
-  presenter_name: string | null;
   assets: ContentAssetRead[];
   allowed_transitions: ContentStatus[];
 }

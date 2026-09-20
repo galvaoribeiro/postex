@@ -123,13 +123,6 @@ class RegenerationScope(str, Enum):
     CTA = "CTA"
 
 
-class VisualTone(str, Enum):
-    """Tom da capa still. Nao e seletor de motor: so muda o prompt (e o host ousado)."""
-
-    COMMERCIAL = "COMMERCIAL"
-    DARING = "DARING"
-
-
 class ContentObjective(str, Enum):
     """Objetivo do conteudo na linguagem do usuario.
 

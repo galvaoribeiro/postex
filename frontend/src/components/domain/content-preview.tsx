@@ -47,11 +47,6 @@ export function ContentPreview({
                 <div className="relative">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={cover} alt="" className="aspect-[4/5] w-full object-cover" />
-                  {content.presenter_name && (
-                    <span className="absolute bottom-2 left-2 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium text-white">
-                      {content.presenter_name}
-                    </span>
-                  )}
                 </div>
               ) : (
                 <div className="flex h-28 items-end bg-gradient-to-br from-brand-700 to-brand-400 px-4 pb-3">
@@ -95,8 +90,7 @@ export function ContentPreview({
           </div>
         </div>
         <p className="mt-3 text-center text-xs text-foreground/45">
-          {FORMAT_META[content.format].label}
-          {content.presenter_name ? ` · ${content.presenter_name}` : ""} · still gerado, nao um video
+          {FORMAT_META[content.format].label} · still gerado, nao um video
         </p>
       </div>
       {actions && <div className="flex w-full max-w-md flex-wrap justify-center gap-2">{actions}</div>}

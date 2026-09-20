@@ -53,11 +53,9 @@ def _to_read(content: Content, assets: AssetService) -> ContentRead:
         for link in content.asset_links
         if link.asset is not None
     ]
-    presenter = (content.generation_context or {}).get("presenter") or {}
     return data.model_copy(
         update={
             "assets": linked,
-            "presenter_name": presenter.get("display_name"),
             "allowed_transitions": ContentService.allowed_transitions(content),
         }
     )

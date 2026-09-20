@@ -19,7 +19,6 @@ class ImagePrompt:
     negative_prompt: str = ""
     size: str = "1024x1792"
     seed: int = 0
-    presenter_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
