@@ -47,101 +47,89 @@ CHARACTER_BRIEF = f"""\
 {CREATIVE_MARKER}
 
 CRIANDO A MODELO
-AGE
-[18+ ONLY — clearly over 25 years old]
+IDADE
 
-HAIR COLOR
-Natural Brazilian hair; if unspecified, dark brown. Keep it consistent.
+[SOMENTE PARA MAIORES DE 18 ANOS — INSERIR IDADE]
 
-OTHER CHARACTERISTICS
-Attractive adult Brazilian woman. Feminine, curvy, fit, naturally voluptuous.
-Must look like a real Brazilian woman, not a fashion render or AI-generated model.
+COR DO CABELO
 
-Create an ultra-photorealistic vertical 9:16 mirror selfie of that woman.
+[INSERIR COR DO CABELO]
 
-She is standing naturally in front of a full-length mirror inside her own home
-in Brazil, casually taking a mirror selfie with an orange iPhone 17. The phone
-must look authentic, correctly proportioned and physically believable in her
-hand. She holds it naturally at approximately upper-chest/face height while
-looking at the phone screen through the mirror.
+OUTRAS CARACTERÍSTICAS
 
-This image will later be used as the reference character for realistic product
-videos, so her identity, facial features, hairstyle, body proportions, skin
-tone and overall appearance must be clearly defined and visually consistent.
+[INSERIR OUTRAS CARACTERÍSTICAS FÍSICAS]
 
-Give her realistic anatomy, naturally feminine curves, a defined waist,
-proportional hips and legs, and a flattering silhouette. Naturally fit and
-curvy, not exaggerated, artificial, surgically impossible or cartoonish.
+Crie uma selfie vertical ultra-realista no formato 9:16 de uma mulher brasileira adulta e atraente, com corpo feminino,
+curvilíneo, em forma e naturalmente voluptuoso. Ela deve parecer claramente uma mulher brasileira real, e não uma renderização de moda ou modelo gerado por IA.
+Respeite exatamente a idade, a cor do cabelo e as características adicionais fornecidas acima.
 
-Her pose should already resemble the opening frame of a casual TikTok product
-mirror video: confident, subtly seductive and feminine but completely
-believable. She may slightly shift her weight onto one leg, gently angle one
-hip, keep the other leg relaxed, subtly arch her posture and hold her free arm
-naturally beside her body or lightly near her waist. Spontaneous, not
-professionally choreographed.
+Ela está em pé, naturalmente, em frente a um espelho de corpo inteiro dentro de sua casa no Brasil, tirando uma selfie casual com um iPhone 17 laranja.
+O telefone deve parecer autêntico, com proporções corretas e fisicamente convincente em sua mão.
+Ela o segura naturalmente na altura do peito/rosto, enquanto olha para a tela do telefone através do espelho.
 
-Dress her in a simple random fashionable outfit appropriate for an adult woman,
-such as a fitted casual dress, matching top-and-skirt set, fitted top with
-shorts, or stylish athleisure. Clothing is temporary and should not hide her
-overall body proportions.
+Esta imagem será posteriormente usada como personagem de referência para vídeos de moda realistas, portanto, sua identidade, traços faciais,
+penteado, proporções corporais, tom de pele e aparência geral devem ser claramente definidos e visualmente consistentes.
 
-The environment must feel unmistakably like a real, ordinary Brazilian home
-rather than an American luxury apartment, photography studio, hotel or
-influencer set. Modest residential interior: light painted walls, simple
-ceramic or porcelain tile flooring, a normal wooden or white interior door,
-basic bedroom furniture or wardrobe partially visible, small everyday household
-details, and a large ordinary full-length mirror leaning against or attached
-to the wall.
+Dê a ela uma aparência brasileira atraente, com anatomia realista, curvas naturalmente femininas, cintura definida,
+quadris e pernas proporcionais e uma silhueta favorecedora. Seu corpo deve parecer naturalmente em forma e curvilíneo, não
+exagerado, artificial, cirurgicamente impossível ou caricato.
 
-Keep the room slightly imperfect and genuinely lived-in. Subtle details such as
-a small object on a dresser, simple bedding, a charging cable, sandals. Do not
-make the room dirty, cluttered or distracting. Nothing carefully staged for an
-advertisement.
+Sua pose já deve lembrar o quadro de abertura de um vídeo casual de moda no espelho do TikTok: confiante, sutilmente
+sedutora e feminina, mas ainda completamente crível. Ela pode transferir levemente o peso para uma perna, inclinar suavemente
+um quadril, manter a outra perna relaxada, arquear sutilmente a postura e manter o braço livre naturalmente ao lado do corpo ou
+levemente próximo à cintura. A pose deve parecer espontânea, e não coreografada profissionalmente.
 
-Use natural Brazilian home lighting. Soft daylight from an unseen window plus
-subtle indoor ambient light. Avoid cinematic studio lighting, colored LEDs,
-dramatic rim lights, beauty lighting, artificial glow or luxury-commercial
-aesthetics.
+Vista-a com uma roupa casual e elegante, apropriada para uma mulher adulta, como um vestido casual ajustado,
+um conjunto de blusa e saia combinando, uma blusa ajustada com shorts ou um conjunto esportivo estiloso. A roupa é temporária e
+não deve ocultar visualmente as proporções gerais do corpo dela, já que será substituída posteriormente por outras peças de roupa.
 
-The image should feel as if she casually opened her camera and took the photo
-herself at home.
+O ambiente deve transmitir inequivocamente a sensação de uma casa brasileira real e comum, e não de um apartamento de luxo americano,
+um estúdio fotográfico, um hotel ou um cenário de influenciadora. Use um interior residencial modesto e familiar: paredes pintadas em tons claros,
+pisos de cerâmica ou porcelanato simples, uma porta interna comum de madeira ou branca, móveis básicos de quarto ou guarda-roupa parcialmente visíveis, pequenos detalhes domésticos do dia a dia e um grande espelho de corpo inteiro comum encostado ou fixado na parede.
 
-Photographic look: realistic smartphone photography captured with an
-iPhone 17-class camera, natural computational HDR, realistic skin texture,
-subtle pores, tiny imperfections, realistic hair strands, believable fabric
-texture, accurate reflections, natural exposure, moderate smartphone
-sharpening, realistic dynamic range. Clean and high quality but NOT
-professionally polished.
+Mantenha o ambiente ligeiramente imperfeito e com um aspecto genuinamente habitado. Inclua detalhes sutis e verossímeis, como um pequeno objeto em uma cômoda, roupa de cama simples, um cabo de carregamento, sandálias ou outro item cotidiano inofensivo ao fundo, mas não deixe o ambiente sujo, bagunçado ou com elementos que distraiam a atenção. Nada deve parecer cuidadosamente produzido para um anúncio.
 
-Do not use extreme background blur. Most of the room should remain reasonably
-recognizable.
+Use iluminação natural típica de casas brasileiras. A luz suave do dia pode entrar por uma janela discreta, combinada com uma iluminação ambiente interna sutil. Evite iluminação de estúdio cinematográfica, LEDs coloridos, luzes de contorno dramáticas, iluminação de beleza, brilho artificial ou estética comercial de luxo.
 
-The mirror reflection must be physically accurate. Her body, hands, fingers,
-smartphone, clothing, room geometry and reflection must all be coherent. The
-orange iPhone 17 must appear only where physically appropriate and must not be
-duplicated.
+A imagem deve transmitir a sensação de que ela abriu a câmera casualmente e tirou a foto em casa.
 
-Frame her approximately from head to knees or almost full body, with enough
-surrounding environment to establish a real Brazilian home. She is the obvious
-focal point while preserving the amateur mirror-selfie feeling.
+Aparência fotográfica: fotografia realista de smartphone capturada com uma câmera de iPhone 17 ou superior, HDR computacional natural, textura de pele realista, poros sutis, pequenas imperfeições, fios de cabelo realistas, textura de tecido verossímil, reflexos precisos, exposição natural, nitidez moderada do smartphone, alcance dinâmico realista e processamento sutil do sensor. Mantenha a imagem limpa e de alta qualidade, mas NÃO com um acabamento profissional.
 
-Her expression should be relaxed, confident and subtly flirtatious, with
-natural eyes and mouth. Avoid exaggerated influencer expressions, duck face or
-an artificial fashion-model stare.
+Não use desfoque de fundo extremo. A maior parte do ambiente deve permanecer razoavelmente reconhecível, como esperado de uma
+foto normal tirada com um smartphone no espelho.
 
-CRITICAL REALISM RULES
-photorealistic adult human
-real skin texture
-anatomically correct body
-anatomically correct hands and fingers
-natural facial asymmetry
-realistic Brazilian residential environment
-accurate mirror physics
-correct smartphone reflection
-realistic body proportions
-believable gravity
-natural posture
-authentic amateur smartphone composition
+O reflexo no espelho deve ser fisicamente preciso. Seu corpo, mãos, dedos, smartphone, roupas, geometria do ambiente
+e o reflexo devem ser coerentes. O iPhone 17 laranja deve aparecer apenas onde for fisicamente apropriado e
+não deve ser duplicado.
+
+Enquadre-a aproximadamente da cabeça aos joelhos ou quase o corpo inteiro, com o ambiente ao redor visível o suficiente para
+estabelecer que ela está dentro de uma casa brasileira real. Mantenha-a como o ponto focal óbvio, preservando a sensação amadora de
+selfie no espelho.
+
+Sua expressão deve ser relaxada, confiante e sutilmente sedutora, com olhos e boca naturais. Evite
+expressões exageradas de influenciadora, biquinho ou um olhar artificial de modelo.
+
+REGRAS DO REALISMO CRÍTICO
+
+Humano adulto fotorrealista
+Textura de pele realista
+Corpo anatomicamente correto
+Mãos e dedos anatomicamente corretos
+Assimetria facial natural
+Ambiente residencial brasileiro realista
+Física de espelhos precisa
+Reflexo correto do smartphone
+Proporções corporais realistas
+Gravidade crível
+Postura natural
+Composição autêntica de smartphone amador
+
+EVITE
+
+Rosto com aparência artificial
+Pele artificial
+Aparência de boneca
+Excesso
 """
 
 # ---------------------------------------------------------------------------
