@@ -56,10 +56,48 @@ def test_still_prompt_uses_creative_brief() -> None:
         ),
         seed=1,
     )
-    low = request.prompt.lower()
+    low = " ".join(request.prompt.split()).lower()
     brief = " ".join(CREATIVE_BRIEF.split()).lower()
     assert brief in low
     assert "cafeteria aroma" in low
     assert "cafe" in low
     assert "over 25" in low
     assert "child" in request.negative_prompt.lower()
+    assert low.index("cafeteria aroma") < low.index("subject:")
+    assert "the scene represents the brand cafeteria aroma" in low
+
+
+def test_still_prompt_puts_focused_product_before_brief() -> None:
+    product = type(
+        "Product",
+        (),
+        {
+            "name": "Espresso Aroma",
+            "description": "Single-origin espresso in a ceramic cup",
+            "is_focus": True,
+        },
+    )()
+    context = type(
+        "Ctx",
+        (),
+        {
+            "name": "Cafeteria Aroma",
+            "segment": "cafeteria",
+            "location": "Sao Paulo",
+            "products": (product,),
+            "services": (),
+        },
+    )()
+    request = build_still_prompt(
+        context=context,  # type: ignore[arg-type]
+        production=ProductionResult(
+            content_format=ContentFormat.REEL,
+            fields={"title": "Cafe da manha", "concept": "Xicara na mao", "payload": {}},
+            context_snapshot={},
+        ),
+        seed=1,
+    )
+    low = " ".join(request.prompt.split()).lower()
+    assert low.index("espresso aroma") < low.index("subject:")
+    assert "ceramic cup" in low
+    assert "do not default to gym wear" in low

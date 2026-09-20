@@ -49,15 +49,13 @@ class FluxImageProvider(ImageProvider):
         started = time.perf_counter()
         width, height = parse_size(request.size)
         prompt = request.prompt
-        # A fal filtra o TEXTO do prompt. Nao anexar "nude/porn" no Avoid —
-        # isso dispara o content checker mesmo com enable_safety_checker=false.
-        if request.negative_prompt:
-            prompt = f"{prompt}\n\nAvoid: {_fal_safe_avoid(request.negative_prompt)}"
+        # Nao concatenar Avoid no final: o T5 do Flux so atende ~512 tokens
+        # e o CLIP ~77. Negativo no fim empurra produto/negocio para fora.
 
         schnell = "schnell" in model.lower()
         safety_on = self.settings.FAL_ENABLE_SAFETY_CHECKER
         payload: dict[str, Any] = {
-            "prompt": prompt[:4000],
+            "prompt": prompt,
             "image_size": {"width": width, "height": height},
             "num_images": 1,
             "output_format": "png",
@@ -151,38 +149,6 @@ class FluxImageProvider(ImageProvider):
         if not data:
             raise AIProviderError("A imagem do Flux veio vazia.")
         return data
-
-
-_FAL_PROMPT_TRIGGERS = (
-    "nude",
-    "nudity",
-    "genitals",
-    "nipples",
-    "pornography",
-    "porn",
-    "sexual",
-    "sex",
-    "explicit",
-    "teen",
-)
-
-
-def _fal_safe_avoid(negative: str) -> str:
-    """Remove termos que o content checker da fal trata como material proibido."""
-    kept: list[str] = []
-    for part in negative.split(","):
-        token = part.strip()
-        if not token:
-            continue
-        low = token.lower()
-        if any(trigger in low for trigger in _FAL_PROMPT_TRIGGERS):
-            continue
-        kept.append(token)
-    extra = ["extra limbs", "deformed face", "text overlay", "watermark"]
-    for item in extra:
-        if item not in {entry.lower() for entry in kept}:
-            kept.append(item)
-    return ", ".join(kept) or "extra limbs, watermark"
 
 
 def _fal_message(response: httpx.Response, fallback: str) -> str:

@@ -145,9 +145,11 @@ class OpenAIImageProvider(ImageProvider):
         )
 
     def _generate_kwargs(self, model: str, prompt: str, size: str) -> dict[str, Any]:
+        # DALL-E 3: 4000. GPT Image (gpt-image-2 e sucessores): 32000.
+        max_chars = 4000 if model.startswith("dall-e") else 32_000
         kwargs: dict[str, Any] = {
             "model": model,
-            "prompt": prompt[:4000],
+            "prompt": prompt[:max_chars],
             "size": size,
             "n": 1,
         }
