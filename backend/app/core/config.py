@@ -127,7 +127,7 @@ class Settings(BaseSettings):
     # So quando o still tem foto de produto. Text-to-image continua em FAL_IMAGE_MODEL.
     FAL_KONTEXT_MODEL: str = "fal-ai/flux-pro/kontext"
     FAL_TIMEOUT_SECONDS: int = 120
-    FAL_VIDEO_MODEL: str = "fal-ai/kling-video/v1.6/standard/image-to-video"
+    FAL_VIDEO_MODEL: str = "fal-ai/kling-video/v2.1/standard/image-to-video"
     # Tempo maximo aguardando a fila da fal e baixando o MP4 (nao e duracao do clip).
     FAL_VIDEO_TIMEOUT_SECONDS: int = 600
     FAL_VIDEO_POLL_INTERVAL_SECONDS: float = 2.0

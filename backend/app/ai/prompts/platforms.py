@@ -39,20 +39,14 @@ especificas do nicho e da regiao - nunca uma lista generica."""
     return f"{common}\n\n{extras[destination]}"
 
 
-def still_aspect(destination: CampaignDestination, content_format: ContentFormat) -> str:
-    if destination in {CampaignDestination.TIKTOK, CampaignDestination.TIKTOK_SHOP}:
-        return "1024x1792"
-    if content_format in {ContentFormat.REEL, ContentFormat.STORY}:
-        return "1024x1792"
-    return "1024x1024"
+def still_aspect(_destination: CampaignDestination, _content_format: ContentFormat) -> str:
+    """Campanhas saem sempre em 9:16 (selfie no espelho)."""
+    return "1024x1792"
 
 
-def video_duration(destination: CampaignDestination) -> int:
-    if destination is CampaignDestination.TIKTOK_SHOP:
-        return 5
-    if destination is CampaignDestination.TIKTOK:
-        return 5
-    return 4
+def video_duration(_destination: CampaignDestination) -> int:
+    """Kling image-to-video so aceita 5 ou 10 segundos. Campanhas usam 5."""
+    return 5
 
 
 def output_labels(outputs: list[CampaignOutput]) -> str:

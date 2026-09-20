@@ -96,11 +96,15 @@ def test_still_prompt_uses_commercial_direction() -> None:
     assert "cafe" in low
     assert "over 25" in low
     assert "child" in request.negative_prompt.lower()
-    assert "the product is the star" in low or "hero" in low
-    assert "the scene represents the brand cafeteria aroma" in low
-    assert "product fidelity" not in low
+    assert "creative brief" in low
+    assert "mirror selfie" in low
+    assert "video com rosto" not in low
+    assert "the scene represents the brand cafeteria aroma" not in low
+    assert "attached photo" not in low
     assert request.references == ()
-    assert low.index("cafeteria aroma") < low.index("hero:")
+    assert low.index("cafeteria aroma") < low.index("creative brief")
+    assert request.size == "1024x1792"
+    assert len(request.prompt) < 32_000
 
 
 def test_still_prompt_puts_focused_product_before_brief() -> None:
@@ -134,9 +138,9 @@ def test_still_prompt_puts_focused_product_before_brief() -> None:
         seed=1,
     )
     low = " ".join(request.prompt.split()).lower()
-    assert low.index("espresso aroma") < low.index("hero:")
+    assert low.index("espresso aroma") < low.index("creative brief")
     assert "ceramic cup" in low
-    assert "do not default to a gym" in low
+    assert "do not substitute a gym" in low
 
 
 def test_still_prompt_with_reference_puts_fidelity_before_brief() -> None:
@@ -147,11 +151,12 @@ def test_still_prompt_with_reference_puts_fidelity_before_brief() -> None:
         has_reference=True,
     )
     low = " ".join(request.prompt.split()).lower()
-    assert "product fidelity" in low
+    assert "attached photo" in low
+    assert "never output a product-only" in low
     assert "restage" in low
-    assert "do not replace it with an invented product" in low
-    assert low.index("product fidelity") < low.index("hero:")
-    assert low.index("product fidelity") < low.index("cafeteria aroma")
+    assert "do not copy those people" in low
+    assert low.index("attached photo") < low.index("creative brief")
+    assert low.index("cafeteria aroma") < low.index("creative brief")
 
 
 def _fake_asset(**kwargs: object) -> SimpleNamespace:
@@ -353,3 +358,88 @@ def test_flux_payload_uses_kontext_with_reference() -> None:
     assert payload["image_url"].startswith("data:image/png;base64,")
     assert base64.b64decode(payload["image_url"].split(",", 1)[1]) == b"foto"
     assert "image_size" not in payload
+
+
+def test_video_prompt_uses_creative_brief_and_scaled_timeline() -> None:
+    from app.ai.video.prompt import build_video_prompt
+    from app.models.enums import CampaignDestination
+
+    request = build_video_prompt(
+        context=_prompt_context(),  # type: ignore[arg-type]
+        production=_production(),
+        seed=1,
+        destination=CampaignDestination.TIKTOK,
+        has_reference=True,
+    )
+    low = " ".join(request.prompt.split()).lower()
+    assert request.duration_seconds == 5
+    assert request.aspect_ratio == "9:16"
+    assert "creative brief" in low
+    assert "video com rosto" in low
+    assert "criando a modelo" not in low
+    assert "image-to-video" in low
+    assert "starting frame" in low
+    assert "5-second performance" in low
+    assert low.index("cafeteria aroma") < low.index("creative brief")
+    assert "child" in request.negative_prompt.lower()
+    assert len(request.prompt) < 32_000
+
+
+def test_compress_still_for_video_shrinks_png() -> None:
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.ai.image.base import ImageReference
+    from app.ai.providers.fal_video_provider import compress_still_for_video
+
+    raw = BytesIO()
+    pixels = [(i * 3 % 256, i * 7 % 256, i * 11 % 256) for i in range(1024 * 1792)]
+    image = Image.new("RGB", (1024, 1792))
+    image.putdata(pixels)
+    image.save(raw, format="PNG")
+    original = ImageReference(data=raw.getvalue(), mime_type="image/png", filename="capa.png")
+    prepared = compress_still_for_video(original)
+    assert prepared.mime_type == "image/jpeg"
+    assert prepared.data[:2] == b"\xff\xd8"
+    assert len(prepared.data) < 400_000
+
+
+def test_kling_payload_snaps_duration_and_truncates_prompt() -> None:
+    from app.ai.image.base import ImageReference
+    from app.ai.providers.fal_video_provider import build_fal_video_payload
+    from app.ai.video.base import VideoPrompt
+
+    request = VideoPrompt(
+        prompt="x" * 4000,
+        negative_prompt="blur, child",
+        aspect_ratio="9:16",
+        duration_seconds=4,
+        seed=99,
+        references=(ImageReference(data=b"img", mime_type="image/png", filename="a.png"),),
+    )
+    payload = build_fal_video_payload(
+        "fal-ai/kling-video/v2.1/standard/image-to-video",
+        request,
+        "https://example.com/still.png",
+    )
+    assert payload["duration"] == "5"
+    assert len(payload["prompt"]) == 2500
+    assert payload["image_url"] == "https://example.com/still.png"
+    assert "seed" not in payload
+    assert "aspect_ratio" not in payload
+    assert "child" in payload["negative_prompt"]
+
+
+def test_seedance_payload_keeps_aspect_and_clamps_duration() -> None:
+    from app.ai.providers.fal_video_provider import build_fal_video_payload
+    from app.ai.video.base import VideoPrompt
+
+    payload = build_fal_video_payload(
+        "bytedance/seedance-2.5/image-to-video",
+        VideoPrompt(prompt="move", duration_seconds=12, aspect_ratio="9:16", seed=3),
+        "https://example.com/still.png",
+    )
+    assert payload["duration"] == "12"
+    assert payload["aspect_ratio"] == "9:16"
+    assert payload["seed"] == 3

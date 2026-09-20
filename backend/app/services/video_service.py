@@ -13,19 +13,19 @@ from app.ai.context_builder import BusinessContext
 from app.ai.image.base import ImageReference
 from app.ai.video.prompt import build_video_prompt
 from app.ai.video.registry import get_video_provider
+from app.core.exceptions import AIProviderError
 from app.core.logging import get_logger
 from app.models.asset import Asset
 from app.models.business import Business
 from app.models.content import Content
 from app.models.enums import (
     AssetKind,
-    AssetStatus,
     CampaignDestination,
     ContentAssetRole,
 )
 from app.services.asset_service import AssetService
 from app.services.content_service import ContentService
-from app.services.still_service import load_reference, select_reference_asset
+from app.services.still_service import load_reference
 
 logger = get_logger(__name__)
 
@@ -49,15 +49,21 @@ class VideoService:
         replace_existing: bool = False,
     ) -> tuple[Asset, dict[str, object]]:
         content = await self.contents.get(business.id, content.id)
-        reference, reference_asset_id = await self._load_focused_reference(
-            business.id, product_id
+        reference, reference_asset_id = await self._ensure_model_still(
+            business=business,
+            content=content,
+            context=context,
+            production=production,
+            seed=seed,
+            destination=destination,
+            product_id=product_id,
         )
         request = build_video_prompt(
             context=context,
             production=production,
             seed=seed,
             destination=destination,
-            has_reference=reference is not None,
+            has_reference=True,
         )
         if reference is not None:
             request = replace(request, references=(reference,))
@@ -114,22 +120,46 @@ class VideoService:
         await self.session.flush()
         return asset, meta
 
-    async def _load_focused_reference(
+    async def _ensure_model_still(
         self,
-        business_id: uuid.UUID,
+        *,
+        business: Business,
+        content: Content,
+        context: BusinessContext,
+        production: ProductionResult,
+        seed: int,
+        destination: CampaignDestination,
         product_id: uuid.UUID | None,
-    ) -> tuple[ImageReference | None, uuid.UUID | None]:
-        if product_id is None:
-            return None, None
-        candidates = await self.assets.list(
-            business_id,
-            status=AssetStatus.READY,
-            product_id=product_id,
+    ) -> tuple[ImageReference, uuid.UUID]:
+        """Image-to-video parte do still da modelo, nunca da foto crua do produto.
+
+        Se a campanha ainda nao tem capa, gera o still com o prompt de imagem.
+        O prompt de video so entra depois, para animar esse quadro.
+        """
+        cover = next(
+            (
+                link.asset
+                for link in content.asset_links
+                if link.role is ContentAssetRole.COVER and link.asset is not None
+            ),
+            None,
         )
-        chosen = select_reference_asset(candidates)
-        if chosen is None:
-            return None, None
-        reference = await load_reference(self.assets.storage, chosen)
+        if cover is None:
+            from app.services.still_service import StillService
+
+            cover, _meta = await StillService(self.session).attach_cover(
+                business=business,
+                content=content,
+                context=context,
+                production=production,
+                seed=seed,
+                product_id=product_id,
+                destination=destination,
+            )
+
+        reference = await load_reference(self.assets.storage, cover)
         if reference is None:
-            return None, None
-        return reference, chosen.id
+            raise AIProviderError(
+                "Nao foi possivel ler o still da modelo para animar o video."
+            )
+        return reference, cover.id
