@@ -25,6 +25,7 @@ import { Progress } from "@/components/ui/progress";
 import { assetsApi, uploadLinkedImage } from "@/lib/api/assets";
 import { campaignsApi } from "@/lib/api/campaigns";
 import { productsApi } from "@/lib/api/catalog";
+import { integrationsApi } from "@/lib/api/integrations";
 import { talentsApi } from "@/lib/api/talents";
 import { CAMPAIGN_JOB_TIMEOUT_MS } from "@/lib/api/jobs";
 import { ApiError } from "@/lib/api/client";
@@ -40,7 +41,11 @@ import { useJobWatcher } from "@/lib/hooks/use-job-watcher";
 import { queryKeys } from "@/lib/query-keys";
 import { cn, formatCurrency } from "@/lib/utils";
 
-type Step = "choice" | "talent" | "questions" | "generating" | "preview";
+type Step = "choice" | "talent" | "integration" | "questions" | "generating" | "preview";
+
+function needsProductIntegration(destination: CampaignDestination | null): boolean {
+  return destination === "TIKTOK" || destination === "TIKTOK_SHOP";
+}
 
 const DESTINATIONS: {
   value: CampaignDestination;
@@ -99,6 +104,10 @@ function CriarFlow() {
     queryKey: queryKeys.assets({ kind: "MODEL_PHOTO", status: "READY" }),
     queryFn: () => assetsApi.list({ kind: "MODEL_PHOTO", status: "READY" }),
   });
+  const { data: integrationAssets } = useQuery({
+    queryKey: queryKeys.assets({ kind: "INTEGRATION_PHOTO", status: "READY" }),
+    queryFn: () => assetsApi.list({ kind: "INTEGRATION_PHOTO", status: "READY" }),
+  });
 
   const [step, setStep] = useState<Step>("choice");
   const [destination, setDestination] = useState<CampaignDestination | null>(() =>
@@ -108,6 +117,10 @@ function CriarFlow() {
   const [productId, setProductId] = useState<string | null>(() => searchParams.get("product"));
   const [modelId, setModelId] = useState<string | null>(null);
   const [previewModel, setPreviewModel] = useState<AssetRead | null>(null);
+  const [integrationId, setIntegrationId] = useState<string | null>(null);
+  const [previewIntegration, setPreviewIntegration] = useState<AssetRead | null>(null);
+  const [integrationBusy, setIntegrationBusy] = useState(false);
+  const [integrationError, setIntegrationError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<CreationQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -132,6 +145,7 @@ function CriarFlow() {
     destination: CampaignDestination;
     productId: string;
     modelId: string;
+    coverAssetId?: string | null;
     outputs: CampaignOutput[];
     answers: Record<string, string>;
   } | null>(null);
@@ -147,6 +161,13 @@ function CriarFlow() {
     previewModel && previewModel.id === modelId
       ? previewModel
       : (modelAssets ?? []).find((item) => item.id === modelId) ?? previewModel;
+  const selectedIntegration =
+    previewIntegration && previewIntegration.id === integrationId
+      ? previewIntegration
+      : (integrationAssets ?? []).find((item) => item.id === integrationId) ?? previewIntegration;
+  const productIntegrations = (integrationAssets ?? []).filter(
+    (asset) => !resolvedProductId || asset.product_id === resolvedProductId
+  );
 
   const urlDestination = parseDestination(searchParams.get("destination"));
   const matchesInboundQuery =
@@ -168,6 +189,7 @@ function CriarFlow() {
       destination: CampaignDestination;
       productId: string;
       modelId: string;
+      coverAssetId?: string | null;
       outputs: CampaignOutput[];
       answers: Record<string, string>;
     }) => {
@@ -185,6 +207,7 @@ function CriarFlow() {
           destination: payload.destination,
           outputs: payload.outputs,
           answers: payload.answers,
+          cover_asset_id: payload.coverAssetId ?? undefined,
         });
         const job = await watch(accepted.job_id, accepted.kind, {
           showToast: false,
@@ -233,6 +256,7 @@ function CriarFlow() {
       destination,
       productId: resolvedProductId,
       modelId,
+      coverAssetId: needsProductIntegration(destination) ? integrationId : null,
       outputs,
       answers: nextAnswers,
     });
@@ -279,6 +303,8 @@ function CriarFlow() {
       const asset = await assetsApi.get(assetId);
       setPreviewModel(asset);
       setModelId(asset.id);
+      setPreviewIntegration(null);
+      setIntegrationId(null);
       queryClient.setQueryData<AssetRead[]>(
         queryKeys.assets({ kind: "MODEL_PHOTO", status: "READY" }),
         (current) => {
@@ -297,6 +323,69 @@ function CriarFlow() {
     }
   }
 
+  async function goToQuestions() {
+    if (!destination || !resolvedProductId) return;
+    const nextQuestions = await campaignsApi.generateQuestions({
+      product_id: resolvedProductId,
+      destination,
+    });
+    if (nextQuestions.length === 0) {
+      await finishQuestions({});
+      return;
+    }
+    setQuestions(nextQuestions);
+    setQuestionIndex(0);
+    setAnswers({});
+    setDraftAnswer("");
+    setStep("questions");
+  }
+
+  async function generateIntegration() {
+    if (!destination || !resolvedProductId || !modelId) return;
+    setIntegrationError(null);
+    setIntegrationBusy(true);
+    try {
+      const accepted = await integrationsApi.generate({
+        product_id: resolvedProductId,
+        model_asset_id: modelId,
+        destination,
+      });
+      const job = await watch(accepted.job_id, accepted.kind, {
+        showToast: false,
+        timeoutMs: 180_000,
+      });
+      if (!job || job.status !== "COMPLETED") {
+        setIntegrationError(job?.error_message ?? "Nao foi possivel integrar a modelo ao produto.");
+        return;
+      }
+      const assetId = typeof job.result?.asset_id === "string" ? job.result.asset_id : null;
+      if (!assetId) {
+        setIntegrationError("A imagem foi gerada, mas o arquivo nao veio no resultado.");
+        return;
+      }
+      const asset = await assetsApi.get(assetId);
+      setPreviewIntegration(asset);
+      setIntegrationId(asset.id);
+      queryClient.setQueryData<AssetRead[]>(
+        queryKeys.assets({ kind: "INTEGRATION_PHOTO", status: "READY" }),
+        (current) => {
+          if (!current) return [asset];
+          if (current.some((item) => item.id === asset.id)) {
+            return current.map((item) => (item.id === asset.id ? asset : item));
+          }
+          return [asset, ...current];
+        }
+      );
+      await queryClient.invalidateQueries({ queryKey: ["assets"] });
+    } catch (err) {
+      setIntegrationError(
+        err instanceof ApiError ? err.message : "Nao foi possivel integrar a modelo ao produto."
+      );
+    } finally {
+      setIntegrationBusy(false);
+    }
+  }
+
   async function handleContinueTalent() {
     if (!destination || !resolvedProductId) return;
     if (!modelId) {
@@ -305,19 +394,35 @@ function CriarFlow() {
     }
     setBusy(true);
     try {
-      const nextQuestions = await campaignsApi.generateQuestions({
-        product_id: resolvedProductId,
-        destination,
-      });
-      if (nextQuestions.length === 0) {
-        await finishQuestions({});
+      if (needsProductIntegration(destination)) {
+        const reuse =
+          previewIntegration &&
+          previewIntegration.product_id === resolvedProductId &&
+          integrationId;
+        setStep("integration");
+        if (!reuse) {
+          setPreviewIntegration(null);
+          setIntegrationId(null);
+          void generateIntegration();
+        }
         return;
       }
-      setQuestions(nextQuestions);
-      setQuestionIndex(0);
-      setAnswers({});
-      setDraftAnswer("");
-      setStep("questions");
+      await goToQuestions();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Nao foi possivel continuar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleContinueIntegration() {
+    if (!integrationId) {
+      toast.error("Aprove a imagem da modelo com o produto para continuar.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await goToQuestions();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Nao foi possivel continuar.");
     } finally {
@@ -647,6 +752,10 @@ function CriarFlow() {
                 key={asset.id}
                 type="button"
                 onClick={() => {
+                  if (asset.id !== modelId) {
+                    setPreviewIntegration(null);
+                    setIntegrationId(null);
+                  }
                   setModelId(asset.id);
                   setPreviewModel(asset);
                 }}
@@ -709,6 +818,121 @@ function CriarFlow() {
               loading={busy}
               icon={<Check className="h-4 w-4" />}
             >
+              Integrar modelo ao Produto
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step === "integration" && (
+        <div className="mx-auto max-w-2xl space-y-6">
+          <button
+            type="button"
+            onClick={() => setStep("talent")}
+            className="inline-flex items-center gap-1.5 text-sm text-foreground/55 hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" /> Voltar
+          </button>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">A modelo com o produto</h2>
+            <p className="mt-1 text-sm text-foreground/55">
+              Veja a mulher com o produto integrado. Se gostar, aprove. Se nao, gere outra.
+              So depois disso o video da campanha e produzido.
+            </p>
+          </div>
+
+          {(integrationBusy || selectedIntegration) && (
+            <div className="overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+              <div className="relative mx-auto aspect-9/16 w-full max-w-sm bg-surface-muted">
+                {integrationBusy ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-foreground/55">
+                    <Sparkles className="h-6 w-6 animate-pulse text-brand-600" />
+                    Integrando a modelo ao produto...
+                  </div>
+                ) : selectedIntegration?.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedIntegration.url}
+                    alt={selectedIntegration.alt_text ?? "Modelo com produto"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-foreground/30">
+                    <User className="h-10 w-10" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {productIntegrations.map((asset) => (
+              <button
+                key={asset.id}
+                type="button"
+                onClick={() => {
+                  setIntegrationId(asset.id);
+                  setPreviewIntegration(asset);
+                }}
+                className={cn(
+                  "overflow-hidden rounded-2xl border text-left transition-colors",
+                  integrationId === asset.id
+                    ? "border-brand-500 ring-2 ring-brand-200"
+                    : "border-border-subtle hover:border-brand-200"
+                )}
+              >
+                <div className="relative aspect-9/16 bg-surface-muted">
+                  {asset.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={asset.url}
+                      alt={asset.alt_text ?? "Modelo com produto"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-foreground/30">
+                      <User className="h-8 w-8" />
+                    </div>
+                  )}
+                  {integrationId === asset.id && (
+                    <span className="absolute right-2 top-2 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                      Aprovada
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => void generateIntegration()}
+              disabled={integrationBusy || !modelId}
+              className="flex aspect-9/16 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-300 bg-brand-50/40 text-sm font-medium text-brand-800 hover:border-brand-400 disabled:opacity-60"
+            >
+              <Sparkles className="h-5 w-5" />
+              {integrationBusy ? "Gerando..." : "Gerar outra integracao"}
+            </button>
+          </div>
+
+          {integrationError && (
+            <p className="rounded-xl bg-danger-bg px-4 py-3 text-sm text-danger-fg">{integrationError}</p>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void generateIntegration()}
+              loading={integrationBusy}
+              icon={<Sparkles className="h-4 w-4" />}
+            >
+              {integrationId ? "Gerar outra" : "Gerar integracao"}
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => void handleContinueIntegration()}
+              disabled={!integrationId || integrationBusy}
+              loading={busy}
+              icon={<Check className="h-4 w-4" />}
+            >
               Aprovar e gerar campanha
             </Button>
           </div>
@@ -728,7 +952,7 @@ function CriarFlow() {
           onNext={() => void handleQuestionNext()}
           onBack={() => {
             if (questionIndex === 0) {
-              setStep("talent");
+              setStep(needsProductIntegration(destination) ? "integration" : "talent");
               return;
             }
             setQuestionIndex((index) => index - 1);
@@ -743,7 +967,9 @@ function CriarFlow() {
             <div>
               <h2 className="text-lg font-semibold text-foreground">Gerando sua campanha</h2>
               <p className="mt-1 text-sm text-foreground/55">
-                Copy, imagem e video sobem em etapas. Voce pode exportar ao terminar.
+                {needsProductIntegration(destination)
+                  ? "Copy e video sobem em etapas a partir da imagem aprovada. Voce pode exportar ao terminar."
+                  : "Copy, imagem e video sobem em etapas. Voce pode exportar ao terminar."}
               </p>
             </div>
             <Progress value={progress} />

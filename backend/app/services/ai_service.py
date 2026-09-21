@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.registry import get_ai_provider
 from app.core.exceptions import ValidationError
+from app.models.asset import Asset
 from app.models.business import Business
 from app.models.enums import (
     AssetKind,
@@ -23,7 +24,11 @@ from app.models.enums import (
     RegenerationScope,
 )
 from app.models.job import Job
-from app.schemas.campaign import CampaignGenerateRequest, CampaignRegenerateRequest
+from app.schemas.campaign import (
+    CampaignGenerateRequest,
+    CampaignRegenerateRequest,
+    IntegrationGenerateRequest,
+)
 from app.schemas.content import (
     ContentFromIdeaRequest,
     ContentGenerateRequest,
@@ -33,13 +38,13 @@ from app.schemas.content import (
 from app.services.asset_service import AssetService
 from app.services.campaign_policy import normalize_outputs
 from app.services.campaign_service import CampaignService
+from app.services.catalog_service import ProductService
 from app.services.content_service import ContentService
 from app.services.creation_questions import (
     destination_instruction,
     persist_creation_answers,
     resolve_creation_item,
 )
-from app.services.catalog_service import ProductService
 from app.services.idea_service import IdeaService
 from app.services.job_service import JobService
 
@@ -122,6 +127,27 @@ class AIService:
         await self.session.commit()
         return job
 
+    async def request_integration_generation(self, data: IntegrationGenerateRequest) -> Job:
+        product = await ProductService(self.session).get(self.business.id, data.product_id)
+        model = await self.assets.get(self.business.id, data.model_asset_id)
+        if model.kind is not AssetKind.MODEL_PHOTO:
+            raise ValidationError("A imagem selecionada nao e uma modelo.")
+        if model.status is not AssetStatus.READY:
+            raise ValidationError("A modelo ainda nao esta pronta.")
+        job = await self.jobs.create(
+            business_id=self.business.id,
+            user_id=self.user_id,
+            kind=JobKind.INTEGRATION_GENERATION,
+            provider=self.provider_name,
+            payload={
+                "product_id": str(product.id),
+                "model_asset_id": str(model.id),
+                "destination": data.destination.value,
+            },
+        )
+        await self.session.commit()
+        return job
+
     async def request_campaign_generation(self, data: CampaignGenerateRequest) -> tuple[Job, uuid.UUID]:
         product = await ProductService(self.session).get(self.business.id, data.product_id)
         model = await self.assets.get(self.business.id, data.model_asset_id)
@@ -129,6 +155,7 @@ class AIService:
             raise ValidationError("A imagem selecionada nao e uma modelo.")
         if model.status is not AssetStatus.READY:
             raise ValidationError("A modelo ainda nao esta pronta.")
+        cover = await self._resolve_cover_asset(data.cover_asset_id)
         outputs = normalize_outputs(data.destination, data.outputs)
         instruction = await persist_creation_answers(
             self.session,
@@ -146,7 +173,11 @@ class AIService:
             product_name=product.name,
             destination=data.destination,
             outputs=outputs,
-            brief={"answers": data.answers, "instruction": instruction},
+            brief={
+                "answers": data.answers,
+                "instruction": instruction,
+                "cover_asset_id": str(cover.id) if cover else None,
+            },
             model_asset_id=model.id,
         )
         job = await self.jobs.create(
@@ -158,6 +189,7 @@ class AIService:
                 "campaign_id": str(campaign.id),
                 "product_id": str(product.id),
                 "model_asset_id": str(model.id),
+                "cover_asset_id": str(cover.id) if cover else None,
                 "destination": data.destination.value,
                 "outputs": [item.value for item in outputs],
                 "instruction": instruction,
@@ -259,3 +291,15 @@ class AIService:
             provider=provider.name,
             payload={"asset_id": str(asset.id)},
         )
+
+    async def _resolve_cover_asset(self, cover_asset_id: uuid.UUID | None) -> Asset | None:
+        if cover_asset_id is None:
+            return None
+        cover = await self.assets.get(self.business.id, cover_asset_id)
+        if cover.status is not AssetStatus.READY:
+            raise ValidationError("A imagem integrada ainda nao esta pronta.")
+        if not str(cover.mime_type or "").startswith("image/"):
+            raise ValidationError("A integracao precisa ser uma imagem.")
+        if cover.kind not in {AssetKind.INTEGRATION_PHOTO, AssetKind.AI_GENERATED}:
+            raise ValidationError("A imagem selecionada nao e uma integracao de produto.")
+        return cover

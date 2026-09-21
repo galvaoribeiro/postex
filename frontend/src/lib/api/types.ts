@@ -26,6 +26,7 @@ export type AssetKind =
   | "REFERENCE"
   | "AI_GENERATED"
   | "MODEL_PHOTO"
+  | "INTEGRATION_PHOTO"
   | "VIDEO_GENERATED"
   | "THUMBNAIL"
   | "OTHER";
@@ -56,6 +57,7 @@ export type JobKind =
   | "CAMPAIGN_GENERATION"
   | "CAMPAIGN_REGENERATION"
   | "TALENT_GENERATION"
+  | "INTEGRATION_GENERATION"
   | "ASSET_ANALYSIS";
 
 export type JobStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";

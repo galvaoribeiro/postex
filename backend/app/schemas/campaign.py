@@ -24,6 +24,16 @@ class CampaignGenerateRequest(APIRequest):
         description="Vazio aplica a combinacao recomendada do destino.",
     )
     answers: dict[str, str] = Field(default_factory=dict)
+    cover_asset_id: uuid.UUID | None = Field(
+        default=None,
+        description="Still modelo+produto ja aprovado. O video anima este quadro.",
+    )
+
+
+class IntegrationGenerateRequest(APIRequest):
+    product_id: uuid.UUID
+    model_asset_id: uuid.UUID
+    destination: CampaignDestination
 
 
 class CampaignRegenerateRequest(APIRequest):

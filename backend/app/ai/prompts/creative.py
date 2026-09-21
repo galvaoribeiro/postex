@@ -50,7 +50,7 @@ CHARACTER_BRIEF = f"""\
 CRIANDO A MODELO
 AGE
 
-18
+25
 
 HAIR COLOR
 
@@ -419,7 +419,7 @@ def spoken_intent(production: ProductionResult) -> str:
 def campaign_header(
     *,
     context: BusinessContext,
-    production: ProductionResult,
+    production: ProductionResult | None = None,
     destination: CampaignDestination | None = None,
     duration_seconds: int | None = None,
 ) -> str:
@@ -431,7 +431,7 @@ def campaign_header(
         f"CAMPAIGN for {dest_label}: {context.name}, a {context.segment} in {location}.",
         _offering_line(context),
     ]
-    scene = _visual_from_production(production)
+    scene = _visual_from_production(production) if production is not None else ""
     if scene:
         lines.append(f"Copy direction (do not render as on-screen text): {scene}")
     if duration_seconds:

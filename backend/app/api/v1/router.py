@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     content_ideas,
     contents,
     dashboard,
+    integrations,
     jobs,
     products,
     services,
@@ -30,6 +31,7 @@ api_router.include_router(content_ideas.router)
 api_router.include_router(contents.router)
 api_router.include_router(campaigns.router)
 api_router.include_router(talents.router)
+api_router.include_router(integrations.router)
 api_router.include_router(jobs.router)
 api_router.include_router(ai.router)
 api_router.include_router(dashboard.router)

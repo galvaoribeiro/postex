@@ -136,6 +136,7 @@ async def _run_handler(
         JobKind.CAMPAIGN_GENERATION: _handle_campaign_generation,
         JobKind.CAMPAIGN_REGENERATION: _handle_campaign_regeneration,
         JobKind.TALENT_GENERATION: _handle_talent_generation,
+        JobKind.INTEGRATION_GENERATION: _handle_integration_generation,
     }
     handler = handlers[kind]
 
@@ -368,6 +369,29 @@ async def _handle_talent_generation(
     }
 
 
+async def _handle_integration_generation(
+    session: Any, business: Business, job_id: uuid.UUID, payload: dict[str, Any]
+) -> dict[str, Any]:
+    await JobService.set_stage(job_id, "integracao", 40)
+    destination = (
+        CampaignDestination(payload["destination"])
+        if payload.get("destination")
+        else None
+    )
+    asset, meta = await StillService(session).generate_integration(
+        business=business,
+        product_id=uuid.UUID(payload["product_id"]),
+        model_asset_id=uuid.UUID(payload["model_asset_id"]),
+        seed=int(job_id.int % 1_000_000),
+        destination=destination,
+    )
+    await JobService.set_stage(job_id, "finalizando", 90)
+    return {
+        "asset_id": str(asset.id),
+        "image": meta.get("image"),
+    }
+
+
 async def _handle_campaign_generation(
     session: Any, business: Business, job_id: uuid.UUID, payload: dict[str, Any]
 ) -> dict[str, Any]:
@@ -378,6 +402,9 @@ async def _handle_campaign_generation(
         uuid.UUID(payload["model_asset_id"])
         if payload.get("model_asset_id")
         else campaign.model_asset_id
+    )
+    cover_asset_id = (
+        uuid.UUID(payload["cover_asset_id"]) if payload.get("cover_asset_id") else None
     )
     destination = CampaignDestination(payload["destination"])
     outputs = [CampaignOutput(item) for item in payload.get("outputs") or []]
@@ -434,10 +461,31 @@ async def _handle_campaign_generation(
         product_id=product_id,
     )
 
-    if wants(outputs, CampaignOutput.IMAGE):
+    stills = StillService(session)
+    if cover_asset_id is not None:
+        try:
+            _asset, still_meta = await stills.attach_existing_cover(
+                business=business,
+                content=content,
+                cover_asset_id=cover_asset_id,
+                product_id=product_id,
+                model_asset_id=model_asset_id,
+            )
+            if wants(outputs, CampaignOutput.IMAGE):
+                await mark("imagem", 68)
+                image_meta = still_meta.get("image") if isinstance(still_meta, dict) else still_meta
+        except Exception as exc:
+            logger.warning(
+                "campaign_cover_reuse_failed",
+                campaign_id=str(campaign.id),
+                error=str(exc),
+            )
+            if wants(outputs, CampaignOutput.IMAGE):
+                failed.append(CampaignOutput.IMAGE.value)
+    elif wants(outputs, CampaignOutput.IMAGE):
         await mark("imagem", 68)
         try:
-            _asset, still_meta = await StillService(session).attach_cover(
+            _asset, still_meta = await stills.attach_cover(
                 business=business,
                 content=content,
                 context=context,

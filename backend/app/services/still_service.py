@@ -16,9 +16,13 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.ai.content_engine import ProductionResult
 from app.ai.context_builder import BusinessContext
 from app.ai.image.base import ImageReference
-from app.ai.image.prompt import build_still_prompt, build_talent_prompt
+from app.ai.image.prompt import (
+    build_integration_prompt,
+    build_still_prompt,
+    build_talent_prompt,
+)
 from app.ai.image.registry import resolve_cover_provider
-from app.core.exceptions import StorageError
+from app.core.exceptions import StorageError, ValidationError
 from app.core.logging import get_logger
 from app.models.asset import Asset
 from app.models.business import Business
@@ -201,3 +205,94 @@ class StillService:
             tags=["ai-generated", "model"],
         )
         return asset, {"image": dict(generated.metadata()), "asset_id": str(asset.id)}
+
+    async def generate_integration(
+        self,
+        *,
+        business: Business,
+        product_id: uuid.UUID,
+        model_asset_id: uuid.UUID,
+        seed: int,
+        destination: CampaignDestination | None = None,
+    ) -> tuple[Asset, dict[str, object]]:
+        from app.ai.context_builder import ContextBuilder
+
+        product_ref, product_asset_id = await self._load_focused_reference(
+            business.id, product_id, None
+        )
+        model_ref, resolved_model_id = await self._load_model_reference(
+            business.id, model_asset_id
+        )
+        context = await ContextBuilder(self.session).build(
+            business, focus_product_id=product_id
+        )
+        request = build_integration_prompt(
+            context=context,
+            seed=seed,
+            destination=destination,
+            has_reference=product_ref is not None,
+            has_model=model_ref is not None,
+        )
+        references = tuple(item for item in (model_ref, product_ref) if item is not None)
+        if references:
+            request = replace(request, references=references)
+        generated = await resolve_cover_provider().generate(request)
+        asset = await self.assets.create_generated(
+            business.id,
+            data=generated.data,
+            mime_type=generated.mime_type,
+            filename=f"integracao-{uuid.uuid4().hex[:8]}.png",
+            kind=AssetKind.INTEGRATION_PHOTO,
+            title="Modelo com produto",
+            alt_text="Modelo com o produto integrado.",
+            width=generated.width,
+            height=generated.height,
+            product_id=product_id,
+            tags=["ai-generated", "integration"],
+        )
+        image_meta = dict(generated.metadata())
+        if product_asset_id is not None:
+            image_meta["reference_asset_id"] = str(product_asset_id)
+        if resolved_model_id is not None:
+            image_meta["model_asset_id"] = str(resolved_model_id)
+        return asset, {"image": image_meta, "asset_id": str(asset.id)}
+
+    async def attach_existing_cover(
+        self,
+        *,
+        business: Business,
+        content: Content,
+        cover_asset_id: uuid.UUID,
+        product_id: uuid.UUID | None = None,
+        model_asset_id: uuid.UUID | None = None,
+        replace_existing: bool = False,
+    ) -> tuple[Asset, dict[str, object]]:
+        content = await self.contents.get(business.id, content.id)
+        asset = await self.assets.get(business.id, cover_asset_id)
+        if asset.status is not AssetStatus.READY:
+            raise ValidationError("A imagem integrada ainda nao esta pronta.")
+        if not str(asset.mime_type or "").startswith("image/"):
+            raise ValidationError("A integracao precisa ser uma imagem.")
+        if replace_existing:
+            await self.contents.replace_role_asset(
+                content, asset.id, role=ContentAssetRole.COVER, position=0
+            )
+        else:
+            await self.contents.link_asset(
+                content, asset.id, role=ContentAssetRole.COVER, position=0
+            )
+        image_meta: dict[str, object] = {
+            "reused": True,
+            "asset_id": str(asset.id),
+        }
+        if product_id is not None:
+            image_meta["reference_product_id"] = str(product_id)
+        if model_asset_id is not None:
+            image_meta["model_asset_id"] = str(model_asset_id)
+        meta: dict[str, object] = {"image": image_meta}
+        context_blob = dict(content.generation_context or {})
+        context_blob.update(meta)
+        content.generation_context = context_blob
+        flag_modified(content, "generation_context")
+        await self.session.flush()
+        return asset, meta

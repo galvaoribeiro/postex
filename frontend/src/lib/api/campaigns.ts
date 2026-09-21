@@ -28,6 +28,7 @@ export const campaignsApi = {
     destination: CampaignDestination;
     outputs?: CampaignOutput[] | null;
     answers?: Record<string, string>;
+    cover_asset_id?: string | null;
   }) => api.post<CampaignGenerateAccepted>("/campaigns/generate", payload),
 
   list: (filters?: {

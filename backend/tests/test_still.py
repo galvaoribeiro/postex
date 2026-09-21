@@ -11,13 +11,19 @@ import pytest
 
 from app.ai.content_engine import ProductionResult
 from app.ai.image.base import ImagePrompt, ImageReference
-from app.ai.image.prompt import build_still_prompt, build_talent_prompt, parse_size, size_for_format
+from app.ai.image.prompt import (
+    build_integration_prompt,
+    build_still_prompt,
+    build_talent_prompt,
+    parse_size,
+    size_for_format,
+)
 from app.ai.providers.flux_image_provider import FluxImageProvider
 from app.ai.providers.mock_image_provider import MockImageProvider
 from app.ai.providers.openai_image_provider import OpenAIImageProvider
 from app.core.config import Settings
 from app.core.exceptions import StorageError
-from app.models.enums import AssetKind, ContentFormat
+from app.models.enums import AssetKind, CampaignDestination, ContentFormat
 from app.services.still_service import StillService, load_reference, select_reference_asset
 from app.services.storage_service import StorageService
 
@@ -141,6 +147,23 @@ def test_still_prompt_puts_focused_product_before_brief() -> None:
     assert low.index("espresso aroma") < low.index("creative brief")
     assert "ceramic cup" in low
     assert "do not substitute a gym" in low
+
+
+def test_integration_prompt_uses_model_and_product() -> None:
+    request = build_integration_prompt(
+        context=_prompt_context(),  # type: ignore[arg-type]
+        seed=2,
+        destination=CampaignDestination.TIKTOK,
+        has_reference=True,
+        has_model=True,
+    )
+    low = " ".join(request.prompt.split()).lower()
+    assert "attached image a" in low
+    assert "attached photo" in low
+    assert "campaign for tiktok" in low
+    assert "identity lock" in low
+    assert request.size == "1024x1792"
+    assert request.references == ()
 
 
 def test_talent_prompt_is_character_only() -> None:

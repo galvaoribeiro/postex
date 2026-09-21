@@ -78,6 +78,66 @@ async def test_instagram_campaign_image_and_copy(user_with_business: ApiUser) ->
     assert "bolsa lina" in blob
 
 
+async def _create_integration(client: AsyncClient, product_id: str, model_id: str) -> str:
+    accepted = await client.post(
+        "/api/v1/integrations/generate",
+        json={
+            "product_id": product_id,
+            "model_asset_id": model_id,
+            "destination": "TIKTOK",
+        },
+    )
+    assert accepted.status_code == 202, accepted.text
+    assert accepted.json()["kind"] == "INTEGRATION_GENERATION"
+    job = await _wait_job(client, accepted.json()["job_id"])
+    asset_id = job["result"]["asset_id"]
+    listed = (await client.get("/api/v1/assets", params={"kind": "INTEGRATION_PHOTO"})).json()
+    assert any(item["id"] == asset_id and item["kind"] == "INTEGRATION_PHOTO" for item in listed)
+    return asset_id
+
+
+async def test_integration_generation_saves_photo(user_with_business: ApiUser) -> None:
+    client = user_with_business.client
+    product = await client.post("/api/v1/products", json={"name": "Bolsa Lina"})
+    product_id = product.json()["id"]
+    model_id = await _create_model(client)
+    first = await _create_integration(client, product_id, model_id)
+    second = await _create_integration(client, product_id, model_id)
+    assert first != second
+
+
+async def test_tiktok_campaign_reuses_approved_cover(user_with_business: ApiUser) -> None:
+    client = user_with_business.client
+    product = await client.post(
+        "/api/v1/products",
+        json={"name": "Tenis Nova", "description": "Tenis urbano branco", "price": 259.0},
+    )
+    product_id = product.json()["id"]
+    model_id = await _create_model(client)
+    cover_id = await _create_integration(client, product_id, model_id)
+    accepted = await client.post(
+        "/api/v1/campaigns/generate",
+        json={
+            "product_id": product_id,
+            "model_asset_id": model_id,
+            "destination": "TIKTOK",
+            "cover_asset_id": cover_id,
+        },
+    )
+    assert accepted.status_code == 202, accepted.text
+    job = await _wait_job(client, accepted.json()["job_id"])
+    assert job["result"]["video"]["provider"] == "mock"
+    campaign = (await client.get(f"/api/v1/campaigns/{accepted.json()['campaign_id']}")).json()
+    content = campaign["contents"][0]
+    covers = [link for link in content["assets"] if link["role"] == "COVER"]
+    videos = [link for link in content["assets"] if link["role"] == "PRIMARY_VIDEO"]
+    assert covers
+    assert covers[0]["asset"]["id"] == cover_id
+    assert covers[0]["asset"]["kind"] == "INTEGRATION_PHOTO"
+    assert videos
+    assert job["result"]["image"] is None
+
+
 async def test_tiktok_campaign_video_and_copy(user_with_business: ApiUser) -> None:
     client = user_with_business.client
     product = await client.post(

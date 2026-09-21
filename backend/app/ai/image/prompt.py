@@ -46,6 +46,28 @@ def build_talent_prompt(*, seed: int) -> ImagePrompt:
     )
 
 
+def build_integration_prompt(
+    *,
+    context: BusinessContext,
+    seed: int,
+    destination: CampaignDestination | None = None,
+    has_reference: bool = True,
+    has_model: bool = True,
+) -> ImagePrompt:
+    """Still da modelo com o produto, sem copy. O usuario valida antes do video."""
+    prompt = _join_prompt(
+        campaign_header(context=context, destination=destination),
+        still_creative_block(has_reference=has_reference, has_model=has_model),
+        HARD_SAFETY,
+    )
+    return ImagePrompt(
+        prompt=prompt,
+        negative_prompt=" ".join(STILL_NEGATIVE.split()),
+        size="1024x1792",
+        seed=seed,
+    )
+
+
 def build_still_prompt(
     *,
     context: BusinessContext,
