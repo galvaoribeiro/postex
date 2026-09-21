@@ -20,7 +20,9 @@ class VideoPrompt:
     aspect_ratio: str = "9:16"
     duration_seconds: int = 8
     seed: int = 0
+    generate_audio: bool = True
     references: tuple[ImageReference, ...] = ()
+    end_user_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -128,9 +128,16 @@ class Settings(BaseSettings):
     FAL_KONTEXT_MODEL: str = "fal-ai/flux-pro/kontext"
     FAL_TIMEOUT_SECONDS: int = 120
     FAL_VIDEO_MODEL: str = "fal-ai/kling-video/v2.1/standard/image-to-video"
+    # Se o Seedance recusar o still (filtro de semelhança), tenta este I2V.
+    # Vazio desliga o fallback.
+    FAL_VIDEO_FALLBACK_MODEL: str | None = (
+        "fal-ai/kling-video/v2.1/standard/image-to-video"
+    )
     # Tempo maximo aguardando a fila da fal e baixando o MP4 (nao e duracao do clip).
     FAL_VIDEO_TIMEOUT_SECONDS: int = 600
     FAL_VIDEO_POLL_INTERVAL_SECONDS: float = 2.0
+    # Kling 3 / Veo / Seedance: trilha nativa (ambiente + voz). Kling 2.1 ignora.
+    FAL_VIDEO_GENERATE_AUDIO: bool = True
     # false = pede a fal para nao filtrar. A conta precisa estar autorizada
     # no painel da fal.ai; senão o checker continua ativo no servidor.
     FAL_ENABLE_SAFETY_CHECKER: bool = False
@@ -142,6 +149,7 @@ class Settings(BaseSettings):
         "IMAGE_PROVIDER",
         "VIDEO_PROVIDER",
         "FAL_KEY",
+        "FAL_VIDEO_FALLBACK_MODEL",
         mode="before",
     )
     @classmethod

@@ -8,11 +8,18 @@ from app.ai.prompts.creative import (
     HARD_SAFETY,
     VIDEO_NEGATIVE,
     campaign_header,
+    spoken_intent,
     video_creative_block,
 )
 from app.ai.prompts.platforms import video_duration
 from app.ai.video.base import VideoPrompt
+from app.core.config import settings
 from app.models.enums import CampaignDestination
+
+
+def _speech_language(model: str) -> str:
+    """Kling so sintetiza ingles/chines; Veo e Seedance seguem o prompt."""
+    return "en" if "kling" in (model or "").lower() else "pt"
 
 
 def _join_prompt(*parts: str) -> str:
@@ -35,7 +42,12 @@ def build_video_prompt(
             destination=destination,
             duration_seconds=duration,
         ),
-        video_creative_block(duration_seconds=duration, has_reference=has_reference),
+        video_creative_block(
+            duration_seconds=duration,
+            has_reference=has_reference,
+            spoken_intent=spoken_intent(production),
+            speech_language=_speech_language(settings.FAL_VIDEO_MODEL),
+        ),
         HARD_SAFETY,
     )
     return VideoPrompt(
@@ -44,4 +56,8 @@ def build_video_prompt(
         aspect_ratio="9:16",
         duration_seconds=duration,
         seed=seed,
+        generate_audio=settings.FAL_VIDEO_GENERATE_AUDIO,
+        end_user_id=(
+            str(context.business_id) if getattr(context, "business_id", None) else None
+        ),
     )

@@ -26,6 +26,7 @@ import { assetsApi, uploadLinkedImage } from "@/lib/api/assets";
 import { campaignsApi } from "@/lib/api/campaigns";
 import { productsApi } from "@/lib/api/catalog";
 import { talentsApi } from "@/lib/api/talents";
+import { CAMPAIGN_JOB_TIMEOUT_MS } from "@/lib/api/jobs";
 import { ApiError } from "@/lib/api/client";
 import type {
   AssetRead,
@@ -106,6 +107,7 @@ function CriarFlow() {
   const [outputs, setOutputs] = useState<CampaignOutput[]>(["IMAGE", "COPY"]);
   const [productId, setProductId] = useState<string | null>(() => searchParams.get("product"));
   const [modelId, setModelId] = useState<string | null>(null);
+  const [previewModel, setPreviewModel] = useState<AssetRead | null>(null);
   const [questions, setQuestions] = useState<CreationQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -141,6 +143,10 @@ function CriarFlow() {
   const selectedHasPhoto = itemHasReadyImage(catalogAssets, resolvedProductId);
   const currentQuestion = questions[questionIndex] ?? null;
   const selectedProduct = products?.find((item) => item.id === resolvedProductId) ?? null;
+  const selectedModel =
+    previewModel && previewModel.id === modelId
+      ? previewModel
+      : (modelAssets ?? []).find((item) => item.id === modelId) ?? previewModel;
 
   const urlDestination = parseDestination(searchParams.get("destination"));
   const matchesInboundQuery =
@@ -182,7 +188,8 @@ function CriarFlow() {
         });
         const job = await watch(accepted.job_id, accepted.kind, {
           showToast: false,
-          timeoutMs: 180_000,
+          timeoutMs: CAMPAIGN_JOB_TIMEOUT_MS,
+          onError: (message) => setError(message),
           onStage: (next, current) => {
             setStage(next);
             setProgress(current.progress);
@@ -194,7 +201,7 @@ function CriarFlow() {
           },
         });
         if (!job || job.status !== "COMPLETED") {
-          setError(job?.error_message ?? "Nao foi possivel gerar a campanha.");
+          setError((current) => current || job?.error_message || "Nao foi possivel gerar a campanha.");
           return;
         }
         const created = await campaignsApi.get(accepted.campaign_id);
@@ -203,7 +210,11 @@ function CriarFlow() {
         queryClient.invalidateQueries({ queryKey: queryKeys.campaigns() });
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Nao foi possivel gerar a campanha.");
+        setError(
+          err instanceof ApiError || err instanceof Error
+            ? err.message
+            : "Nao foi possivel gerar a campanha."
+        );
       }
     },
     [queryClient, watch]
@@ -261,8 +272,24 @@ function CriarFlow() {
         return;
       }
       const assetId = typeof job.result?.asset_id === "string" ? job.result.asset_id : null;
-      await queryClient.invalidateQueries({ queryKey: queryKeys.assets() });
-      if (assetId) setModelId(assetId);
+      if (!assetId) {
+        setTalentError("A modelo foi gerada, mas o arquivo nao veio no resultado.");
+        return;
+      }
+      const asset = await assetsApi.get(assetId);
+      setPreviewModel(asset);
+      setModelId(asset.id);
+      queryClient.setQueryData<AssetRead[]>(
+        queryKeys.assets({ kind: "MODEL_PHOTO", status: "READY" }),
+        (current) => {
+          if (!current) return [asset];
+          if (current.some((item) => item.id === asset.id)) {
+            return current.map((item) => (item.id === asset.id ? asset : item));
+          }
+          return [asset, ...current];
+        }
+      );
+      await queryClient.invalidateQueries({ queryKey: ["assets"] });
     } catch (err) {
       setTalentError(err instanceof ApiError ? err.message : "Nao foi possivel gerar a modelo.");
     } finally {
@@ -389,7 +416,10 @@ function CriarFlow() {
     setRegenerating(output);
     try {
       const accepted = await campaignsApi.regenerate(campaign.id, { output });
-      const job = await watch(accepted.job_id, accepted.kind, { showToast: true });
+      const job = await watch(accepted.job_id, accepted.kind, {
+        showToast: true,
+        timeoutMs: CAMPAIGN_JOB_TIMEOUT_MS,
+      });
       if (job?.status === "COMPLETED") {
         setCampaign(await campaignsApi.get(campaign.id));
       }
@@ -587,12 +617,39 @@ function CriarFlow() {
             </p>
           </div>
 
+          {(talentBusy || selectedModel) && (
+            <div className="overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+              <div className="relative mx-auto aspect-9/16 w-full max-w-sm bg-surface-muted">
+                {talentBusy ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-foreground/55">
+                    <Sparkles className="h-6 w-6 animate-pulse text-brand-600" />
+                    Gerando a modelo...
+                  </div>
+                ) : selectedModel?.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedModel.url}
+                    alt={selectedModel.alt_text ?? "Modelo gerada"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-foreground/30">
+                    <User className="h-10 w-10" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {(modelAssets ?? []).map((asset) => (
               <button
                 key={asset.id}
                 type="button"
-                onClick={() => setModelId(asset.id)}
+                onClick={() => {
+                  setModelId(asset.id);
+                  setPreviewModel(asset);
+                }}
                 className={cn(
                   "overflow-hidden rounded-2xl border text-left transition-colors",
                   modelId === asset.id

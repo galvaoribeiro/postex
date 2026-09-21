@@ -424,8 +424,14 @@ def test_video_prompt_uses_creative_brief_and_scaled_timeline() -> None:
     assert "image-to-video" in low
     assert "starting frame" in low
     assert "5-second performance" in low
+    assert "native audio" in low
+    assert "brazilian portuguese" in low or "lowercase english" in low
+    assert "she speaks" in low
+    assert request.generate_audio is True
     assert low.index("cafeteria aroma") < low.index("creative brief")
     assert "child" in request.negative_prompt.lower()
+    assert "lip-sync" not in request.negative_prompt.lower()
+    assert "silent clip" in request.negative_prompt.lower()
     assert len(request.prompt) < 32_000
 
 
@@ -473,17 +479,87 @@ def test_kling_payload_snaps_duration_and_truncates_prompt() -> None:
     assert "seed" not in payload
     assert "aspect_ratio" not in payload
     assert "child" in payload["negative_prompt"]
+    assert "start_image_url" not in payload
 
 
-def test_seedance_payload_keeps_aspect_and_clamps_duration() -> None:
+def test_kling_v3_can_disable_audio() -> None:
+    from app.ai.providers.fal_video_provider import build_fal_video_payload
+    from app.ai.video.base import VideoPrompt
+
+    payload = build_fal_video_payload(
+        "fal-ai/kling-video/v3/standard/image-to-video",
+        VideoPrompt(prompt="move", duration_seconds=5, generate_audio=False),
+        "https://example.com/still.png",
+    )
+    assert payload["generate_audio"] is False
+
+
+def test_kling_v3_payload_uses_start_image_url() -> None:
+    from app.ai.providers.fal_video_provider import build_fal_video_payload
+    from app.ai.video.base import VideoPrompt
+
+    payload = build_fal_video_payload(
+        "fal-ai/kling-video/v3/standard/image-to-video",
+        VideoPrompt(prompt="move", duration_seconds=5, negative_prompt="blur"),
+        "https://example.com/still.png",
+    )
+    assert payload["start_image_url"] == "https://example.com/still.png"
+    assert "image_url" not in payload
+    assert payload["duration"] == "5"
+    assert payload["generate_audio"] is True
+    assert payload["negative_prompt"] == "blur"
+
+
+def test_veo_payload_uses_seconds_suffix() -> None:
+    from app.ai.providers.fal_video_provider import build_fal_video_payload
+    from app.ai.video.base import VideoPrompt
+
+    payload = build_fal_video_payload(
+        "fal-ai/veo3.1/image-to-video",
+        VideoPrompt(prompt="move", duration_seconds=5, seed=2),
+        "https://example.com/still.png",
+    )
+    assert payload["image_url"] == "https://example.com/still.png"
+    assert payload["duration"] == "4s"
+    assert payload["aspect_ratio"] == "9:16"
+    assert payload["resolution"] == "720p"
+    assert payload["generate_audio"] is True
+    assert payload["seed"] == 2
+
+
+def test_seedance_payload_uses_official_i2v_schema() -> None:
     from app.ai.providers.fal_video_provider import build_fal_video_payload
     from app.ai.video.base import VideoPrompt
 
     payload = build_fal_video_payload(
         "bytedance/seedance-2.5/image-to-video",
-        VideoPrompt(prompt="move", duration_seconds=12, aspect_ratio="9:16", seed=3),
+        VideoPrompt(
+            prompt="move",
+            duration_seconds=12,
+            aspect_ratio="9:16",
+            seed=3,
+            negative_prompt="speech",
+            end_user_id="biz-1",
+        ),
         "https://example.com/still.png",
     )
     assert payload["duration"] == "12"
-    assert payload["aspect_ratio"] == "9:16"
+    assert payload["aspect_ratio"] == "auto"
+    assert payload["resolution"] == "720p"
+    assert payload["generate_audio"] is True
     assert payload["seed"] == 3
+    assert payload["end_user_id"] == "biz-1"
+    assert "negative_prompt" not in payload
+
+
+def test_normalize_seedance_bare_model_to_image_to_video() -> None:
+    from app.ai.providers.fal_video_provider import normalize_fal_video_model
+
+    assert (
+        normalize_fal_video_model("bytedance/seedance-2.5")
+        == "bytedance/seedance-2.5/image-to-video"
+    )
+    assert (
+        normalize_fal_video_model("bytedance/seedance-2.5/image-to-video")
+        == "bytedance/seedance-2.5/image-to-video"
+    )

@@ -34,7 +34,8 @@ VIDEO_NEGATIVE = (
     "child, underage, teen, celebrity lookalike, scene cuts, jump cuts, "
     "external camera movement, location changes, product morphing, identity changes, "
     "face changes, body transformation, text overlay, captions, watermarks, "
-    "TikTok interface, speech, lip-sync, dancing, extra fingers, duplicated limbs, "
+    "TikTok interface, muted video, silent clip, no audio, off-camera narrator, "
+    "robotic text-to-speech, dancing, extra fingers, duplicated limbs, "
     "warped product, floating objects, product duplication, mirror distortion, "
     "phone duplication, cinematic lighting, slow motion, studio fashion aesthetic"
 )
@@ -53,7 +54,7 @@ AGE
 
 HAIR COLOR
 
-BLONDE
+BROWN
 
 OTHER CHARACTERISTICS
 
@@ -400,6 +401,21 @@ def _visual_from_production(production: ProductionResult) -> str:
     return " ".join(bits)[:900]
 
 
+def spoken_intent(production: ProductionResult) -> str:
+    """Gancho da peca para virar fala curta no video (nao texto na tela)."""
+    payload = production.fields.get("payload") or {}
+    for key in ("hook", "headline", "cover_title"):
+        value = payload.get(key) or production.fields.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:180]
+    scenes = payload.get("scenes") or payload.get("frames") or []
+    if scenes and isinstance(scenes[0], dict):
+        voiceover = scenes[0].get("voiceover") or scenes[0].get("hook")
+        if isinstance(voiceover, str) and voiceover.strip():
+            return voiceover.strip()[:180]
+    return ""
+
+
 def campaign_header(
     *,
     context: BusinessContext,
@@ -439,7 +455,13 @@ def still_creative_block(*, has_reference: bool, has_model: bool = False) -> str
     return "\n\n".join(parts)
 
 
-def video_creative_block(*, duration_seconds: int, has_reference: bool) -> str:
+def video_creative_block(
+    *,
+    duration_seconds: int,
+    has_reference: bool,
+    spoken_intent: str = "",
+    speech_language: str = "en",
+) -> str:
     del has_reference
     fidelity = (
         "IMAGE-TO-VIDEO. The attached image is the generated starting frame: "
@@ -450,6 +472,25 @@ def video_creative_block(*, duration_seconds: int, has_reference: bool) -> str:
         "and room must remain consistent with the attached still throughout the "
         "entire video. The product in the still is already correct. Do NOT "
         "redesign, replace, recolor, deform or reinterpret it."
+    )
+    spoken_lang = "brazilian portuguese" if speech_language == "pt" else "lowercase english"
+    spoken = (
+        f"Campaign line to adapt into spoken {spoken_lang} (do not burn as "
+        f"on-screen text): {spoken_intent.strip()}"
+        if spoken_intent.strip()
+        else (
+            f"Invent one short product line in {spoken_lang} that fits this "
+            "exact offering. Do not invent discounts or fake brand claims."
+        )
+    )
+    voice_rule = (
+        "She speaks casual brazilian portuguese, on camera, matching the lips."
+        if speech_language == "pt"
+        else (
+            "Kling native speech is english or chinese; write the dialogue in "
+            "lowercase english (uppercase only for product names). Lips must "
+            "match the words."
+        )
     )
     return f"""\
 {CREATIVE_MARKER}
@@ -477,6 +518,19 @@ hand position, product position, product angle, distance from mirror, facial
 expression, gaze, body orientation or product interaction.
 
 {_video_timeline(duration_seconds)}
+
+NATIVE AUDIO
+The clip must have a real soundtrack. Do not generate a silent or muted video.
+
+Ambient bed: quiet ordinary Brazilian home — room tone, faint street, fabric,
+product handling, a soft phone tap. Keep it documentary, not a music-video mix.
+
+On-camera voice: she speaks naturally while looking at the phone or mirror.
+{voice_rule}
+One or two short lines, then a natural pause. No off-camera narrator.
+No robotic text-to-speech. No burned-in captions.
+
+{spoken}
 
 CAMERA AND MIRROR BEHAVIOR
 The smartphone remains naturally held in one hand whenever physically
@@ -506,10 +560,10 @@ Use one continuous {duration_seconds}-second take.
 
 RESULTADO FINAL
 A highly believable viral-style social-media product video showing the exact
-woman and exact product. She naturally interacts with, presents, demonstrates,
-wears or uses the product according to its actual nature. The product remains
-clearly recognizable and visually consistent throughout the continuous
-recording.
+woman and exact product, with ambient home sound and her own spoken voice.
+She naturally interacts with, presents, demonstrates, wears or uses the
+product according to its actual nature. The product remains clearly
+recognizable and visually consistent throughout the continuous recording.
 """
 
 

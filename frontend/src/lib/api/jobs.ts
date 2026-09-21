@@ -11,6 +11,15 @@ export const jobsApi = {
 
 const TERMINAL_STATUSES: JobStatus[] = ["COMPLETED", "FAILED"];
 
+/** Jobs leves (ideia, analise, still). */
+export const DEFAULT_JOB_TIMEOUT_MS = 120_000;
+
+/**
+ * Campanha com video I2V (Kling 3.0 / Veo). Precisa ficar acima de
+ * FAL_VIDEO_TIMEOUT_SECONDS no worker (padrao 15 min).
+ */
+export const CAMPAIGN_JOB_TIMEOUT_MS = 18 * 60 * 1000;
+
 /** Faz polling de um job ate ele terminar (COMPLETED ou FAILED). */
 export async function waitForJob(
   jobId: string,
@@ -23,7 +32,7 @@ export async function waitForJob(
   }
 ): Promise<JobRead> {
   const intervalMs = options?.intervalMs ?? 1200;
-  const timeoutMs = options?.timeoutMs ?? 120_000;
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_JOB_TIMEOUT_MS;
   const start = Date.now();
   let lastStage: string | null | undefined;
 

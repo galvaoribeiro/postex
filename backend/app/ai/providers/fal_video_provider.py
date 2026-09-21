@@ -59,27 +59,40 @@ class FalVideoProvider(VideoProvider):
 
     async def generate(self, request: VideoPrompt) -> GeneratedVideo:
         started = time.perf_counter()
-        model = self.default_model.strip().lstrip("/")
+        model = normalize_fal_video_model(self.default_model)
         if not request.references:
             raise AIProviderError(
                 "O provedor de video precisa do still da modelo (image-to-video)."
             )
 
         timeout = self._http_timeout()
-        payload: dict[str, Any] | None = None
         try:
             async with httpx.AsyncClient(timeout=timeout) as http:
                 image_url = await self._image_url(http, request.references[0])
-                payload = build_fal_video_payload(model, request, image_url)
-                logger.info(
-                    "ai_video_request",
-                    model=model,
-                    duration=payload.get("duration"),
-                    prompt_chars=len(str(payload.get("prompt") or "")),
-                    image_hosted=not str(image_url).startswith("data:"),
-                )
-                body = await self._run(http, model, payload)
-                raw = await self._extract_bytes(http, body)
+                try:
+                    return await self._generate_with_model(
+                        http, model, request, image_url, started
+                    )
+                except AIProviderError as exc:
+                    fallback = normalize_fal_video_model(
+                        self.settings.FAL_VIDEO_FALLBACK_MODEL or ""
+                    )
+                    if (
+                        fallback
+                        and fallback != model
+                        and _is_seedance(model)
+                        and _is_likeness_refusal(str(exc))
+                    ):
+                        logger.warning(
+                            "ai_video_seedance_likeness_fallback",
+                            model=model,
+                            fallback=fallback,
+                            error=str(exc)[:240],
+                        )
+                        return await self._generate_with_model(
+                            http, fallback, request, image_url, started
+                        )
+                    raise
         except httpx.TimeoutException as exc:
             raise AIProviderError(
                 "A geracao do video demorou mais do que o limite "
@@ -89,6 +102,25 @@ class FalVideoProvider(VideoProvider):
         except httpx.HTTPError as exc:
             raise AIProviderError("Nao foi possivel conectar ao provedor de video (fal.ai).") from exc
 
+    async def _generate_with_model(
+        self,
+        http: httpx.AsyncClient,
+        model: str,
+        request: VideoPrompt,
+        image_url: str,
+        started: float,
+    ) -> GeneratedVideo:
+        payload = build_fal_video_payload(model, request, image_url)
+        logger.info(
+            "ai_video_request",
+            model=model,
+            duration=payload.get("duration"),
+            generate_audio=payload.get("generate_audio"),
+            prompt_chars=len(str(payload.get("prompt") or "")),
+            image_hosted=not str(image_url).startswith("data:"),
+        )
+        body = await self._run(http, model, payload)
+        raw = await self._extract_bytes(http, body)
         latency_ms = int((time.perf_counter() - started) * 1000)
         logger.info(
             "ai_video_generation",
@@ -97,12 +129,15 @@ class FalVideoProvider(VideoProvider):
             latency_ms=latency_ms,
             used_reference=True,
         )
+        duration_seconds = _payload_duration_seconds(
+            payload.get("duration"), request.duration_seconds
+        )
         return GeneratedVideo(
             data=raw,
             mime_type="video/mp4",
             width=720,
             height=1280,
-            duration_seconds=int((payload or {}).get("duration") or request.duration_seconds),
+            duration_seconds=duration_seconds,
             provider=self.name,
             model=model,
             prompt=request.prompt,
@@ -241,35 +276,116 @@ def compress_still_for_video(reference: ImageReference) -> ImageReference:
     return ImageReference(data=data, mime_type="image/jpeg", filename="still.jpg")
 
 
+def normalize_fal_video_model(model: str) -> str:
+    """Seedance 2.5 sem sufixo e o endpoint B2B generico, nao o I2V."""
+    name = (model or "").strip().lstrip("/")
+    if name.rstrip("/") == "bytedance/seedance-2.5":
+        return "bytedance/seedance-2.5/image-to-video"
+    return name
+
+
 def build_fal_video_payload(
     model: str, request: VideoPrompt, image_url: str
 ) -> dict[str, Any]:
-    """Monta o JSON aceito pelo endpoint. Kling 1.6/2.1 so aceita duration 5 ou 10."""
-    name = model.lower()
+    """Monta o JSON aceito pelo endpoint de cada familia (Kling 2.x/3, Veo, Seedance)."""
+    name = normalize_fal_video_model(model).lower()
     prompt = request.prompt.strip()
     if "kling" in name:
         prompt = prompt[:_KLING_PROMPT_MAX]
-    payload: dict[str, Any] = {
-        "prompt": prompt,
-        "image_url": image_url,
-        "duration": _provider_duration(name, request.duration_seconds),
-    }
-    if request.negative_prompt:
-        payload["negative_prompt"] = " ".join(request.negative_prompt.split())[:1000]
-    if "seedance" in name:
-        payload["aspect_ratio"] = request.aspect_ratio or "9:16"
+    duration = _provider_duration(name, request.duration_seconds)
+    negative = " ".join(request.negative_prompt.split())[:1000] if request.negative_prompt else ""
+
+    if _is_kling_v3(name):
+        payload: dict[str, Any] = {
+            "prompt": prompt,
+            "start_image_url": image_url,
+            "duration": duration,
+            "generate_audio": bool(request.generate_audio),
+        }
+        if negative:
+            payload["negative_prompt"] = negative
+        return payload
+
+    if _is_veo(name):
+        payload = {
+            "prompt": prompt,
+            "image_url": image_url,
+            "duration": duration,
+            "aspect_ratio": "9:16",
+            "resolution": "720p",
+            "generate_audio": bool(request.generate_audio),
+            "auto_fix": True,
+        }
+        if negative:
+            payload["negative_prompt"] = negative
         if request.seed:
             payload["seed"] = abs(int(request.seed)) % (2**31)
+        return payload
+
+    payload = {
+        "prompt": prompt,
+        "image_url": image_url,
+        "duration": duration,
+    }
+    if "seedance" in name:
+        payload["aspect_ratio"] = "auto"
+        payload["resolution"] = "720p"
+        payload["generate_audio"] = bool(request.generate_audio)
+        if request.end_user_id:
+            payload["end_user_id"] = request.end_user_id[:128]
+        if request.seed:
+            payload["seed"] = abs(int(request.seed)) % (2**31)
+        return payload
+    if negative:
+        payload["negative_prompt"] = negative
     return payload
 
 
 def _provider_duration(model: str, requested: int) -> str:
     seconds = max(1, int(requested or 5))
+    if _is_kling_v3(model):
+        return str(min(15, max(3, seconds)))
     if "kling" in model:
         return "10" if seconds >= 8 else "5"
+    if _is_veo(model):
+        if seconds <= 5:
+            return "4s"
+        if seconds <= 7:
+            return "6s"
+        return "8s"
     if "seedance" in model:
         return str(min(30, max(4, seconds)))
     return str(seconds)
+
+
+def _payload_duration_seconds(duration: object, fallback: int) -> int:
+    raw = str(duration or "").strip().lower().rstrip("s")
+    if raw.isdigit():
+        return int(raw)
+    return fallback
+
+
+def _is_kling_v3(model: str) -> bool:
+    name = (model or "").lower()
+    return "kling" in name and "/v3/" in name
+
+
+def _is_veo(model: str) -> bool:
+    return "veo3" in (model or "").lower() or "/veo3." in (model or "").lower()
+
+
+def _is_seedance(model: str) -> bool:
+    return "seedance" in (model or "").lower()
+
+
+def _is_likeness_refusal(message: str) -> bool:
+    low = message.lower()
+    return (
+        "likenesses of real people" in low
+        or "likeness of real people" in low
+        or "private information that cannot be processed" in low
+        or "semelhancas de pessoas reais" in low
+    )
 
 
 def _data_uri(reference: ImageReference) -> str:
@@ -294,7 +410,14 @@ def _fal_message(response: httpx.Response, fallback: str) -> str:
     if isinstance(payload, dict):
         detail = payload.get("detail") or payload.get("error") or payload.get("message")
         if isinstance(detail, str) and detail.strip():
-            return f"{fallback} {detail.strip()[:320]}"
+            text = detail.strip()[:320]
+            if _is_likeness_refusal(text):
+                return (
+                    f"{fallback} O Seedance recusou o still da modelo: o filtro "
+                    "trata o rosto fotorrealista como pessoa real. Use Kling "
+                    "para este tipo de video ou deixe o fallback ativo."
+                )
+            return f"{fallback} {text}"
         if isinstance(detail, list) and detail:
             parts: list[str] = []
             for item in detail[:4]:

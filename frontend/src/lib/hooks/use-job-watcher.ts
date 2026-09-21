@@ -68,8 +68,6 @@ export function useJobWatcher() {
         const message = job.error_message ?? `${label} falhou.`;
         if (showToast && toastId !== undefined) {
           toast.error(message, { id: toastId });
-        } else {
-          toast.error(message);
         }
         options?.onError?.(message);
       }
@@ -78,10 +76,6 @@ export function useJobWatcher() {
       const message = error instanceof Error ? error.message : "Falha inesperada.";
       if (showToast && toastId !== undefined) {
         toast.error(message, { id: toastId });
-      } else if (error instanceof DOMException && error.name === "AbortError") {
-        // cancelamento silencioso
-      } else {
-        toast.error(message);
       }
       options?.onError?.(message);
       return null;
