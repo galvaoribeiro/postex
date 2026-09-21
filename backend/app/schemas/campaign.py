@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.models.enums import CampaignDestination, CampaignOutput, CampaignStatus
 from app.schemas.asset import AssetRead
@@ -17,7 +17,7 @@ from app.schemas.content import ContentRead
 
 class CampaignGenerateRequest(APIRequest):
     product_id: uuid.UUID
-    model_asset_id: uuid.UUID
+    model_asset_id: uuid.UUID | None = None
     destination: CampaignDestination
     outputs: list[CampaignOutput] | None = Field(
         default=None,
@@ -28,6 +28,12 @@ class CampaignGenerateRequest(APIRequest):
         default=None,
         description="Still modelo+produto ja aprovado. O video anima este quadro.",
     )
+
+    @model_validator(mode="after")
+    def require_model_or_cover(self) -> CampaignGenerateRequest:
+        if self.model_asset_id is None and self.cover_asset_id is None:
+            raise ValueError("Informe a modelo ou uma imagem ja integrada.")
+        return self
 
 
 class IntegrationGenerateRequest(APIRequest):

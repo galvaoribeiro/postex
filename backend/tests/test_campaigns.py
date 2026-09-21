@@ -213,6 +213,35 @@ async def test_campaign_requires_model(user_with_business: ApiUser) -> None:
     assert response.status_code == 422
 
 
+async def test_tiktok_campaign_cover_without_model(user_with_business: ApiUser) -> None:
+    client = user_with_business.client
+    product = await client.post(
+        "/api/v1/products",
+        json={"name": "Oleo Floral", "description": "Oleo corporal", "price": 79.0},
+    )
+    product_id = product.json()["id"]
+    model_id = await _create_model(client)
+    cover_id = await _create_integration(client, product_id, model_id)
+    accepted = await client.post(
+        "/api/v1/campaigns/generate",
+        json={
+            "product_id": product_id,
+            "destination": "TIKTOK",
+            "cover_asset_id": cover_id,
+        },
+    )
+    assert accepted.status_code == 202, accepted.text
+    job = await _wait_job(client, accepted.json()["job_id"])
+    assert job["result"]["video"]["provider"] == "mock"
+    campaign = (await client.get(f"/api/v1/campaigns/{accepted.json()['campaign_id']}")).json()
+    assert campaign["model_asset_id"] is None
+    content = campaign["contents"][0]
+    covers = [link for link in content["assets"] if link["role"] == "COVER"]
+    videos = [link for link in content["assets"] if link["role"] == "PRIMARY_VIDEO"]
+    assert covers[0]["asset"]["id"] == cover_id
+    assert videos
+
+
 async def test_regenerate_image_output(user_with_business: ApiUser) -> None:
     client = user_with_business.client
     product = await client.post(

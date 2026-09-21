@@ -150,12 +150,16 @@ class AIService:
 
     async def request_campaign_generation(self, data: CampaignGenerateRequest) -> tuple[Job, uuid.UUID]:
         product = await ProductService(self.session).get(self.business.id, data.product_id)
-        model = await self.assets.get(self.business.id, data.model_asset_id)
-        if model.kind is not AssetKind.MODEL_PHOTO:
-            raise ValidationError("A imagem selecionada nao e uma modelo.")
-        if model.status is not AssetStatus.READY:
-            raise ValidationError("A modelo ainda nao esta pronta.")
+        model = None
+        if data.model_asset_id is not None:
+            model = await self.assets.get(self.business.id, data.model_asset_id)
+            if model.kind is not AssetKind.MODEL_PHOTO:
+                raise ValidationError("A imagem selecionada nao e uma modelo.")
+            if model.status is not AssetStatus.READY:
+                raise ValidationError("A modelo ainda nao esta pronta.")
         cover = await self._resolve_cover_asset(data.cover_asset_id)
+        if model is None and cover is None:
+            raise ValidationError("Informe a modelo ou uma imagem ja integrada.")
         outputs = normalize_outputs(data.destination, data.outputs)
         instruction = await persist_creation_answers(
             self.session,
@@ -178,7 +182,7 @@ class AIService:
                 "instruction": instruction,
                 "cover_asset_id": str(cover.id) if cover else None,
             },
-            model_asset_id=model.id,
+            model_asset_id=model.id if model else None,
         )
         job = await self.jobs.create(
             business_id=self.business.id,
@@ -188,7 +192,7 @@ class AIService:
             payload={
                 "campaign_id": str(campaign.id),
                 "product_id": str(product.id),
-                "model_asset_id": str(model.id),
+                "model_asset_id": str(model.id) if model else None,
                 "cover_asset_id": str(cover.id) if cover else None,
                 "destination": data.destination.value,
                 "outputs": [item.value for item in outputs],

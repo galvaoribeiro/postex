@@ -140,11 +140,12 @@ function CriarFlow() {
   const [regenerating, setRegenerating] = useState<CampaignOutput | null>(null);
   const [talentBusy, setTalentBusy] = useState(false);
   const [talentError, setTalentError] = useState<string | null>(null);
+  const [reuseExistingCover, setReuseExistingCover] = useState(false);
 
   const lastRequest = useRef<{
     destination: CampaignDestination;
     productId: string;
-    modelId: string;
+    modelId: string | null;
     coverAssetId?: string | null;
     outputs: CampaignOutput[];
     answers: Record<string, string>;
@@ -168,6 +169,12 @@ function CriarFlow() {
   const productIntegrations = (integrationAssets ?? []).filter(
     (asset) => !resolvedProductId || asset.product_id === resolvedProductId
   );
+  const libraryIntegrations = [...(integrationAssets ?? [])].sort((left, right) => {
+    const leftMatch = left.product_id === resolvedProductId ? 0 : 1;
+    const rightMatch = right.product_id === resolvedProductId ? 0 : 1;
+    return leftMatch - rightMatch;
+  });
+  const visibleIntegrations = reuseExistingCover ? libraryIntegrations : productIntegrations;
 
   const urlDestination = parseDestination(searchParams.get("destination"));
   const matchesInboundQuery =
@@ -188,7 +195,7 @@ function CriarFlow() {
     async (payload: {
       destination: CampaignDestination;
       productId: string;
-      modelId: string;
+      modelId: string | null;
       coverAssetId?: string | null;
       outputs: CampaignOutput[];
       answers: Record<string, string>;
@@ -203,7 +210,7 @@ function CriarFlow() {
       try {
         const accepted = await campaignsApi.generate({
           product_id: payload.productId,
-          model_asset_id: payload.modelId,
+          model_asset_id: payload.modelId ?? undefined,
           destination: payload.destination,
           outputs: payload.outputs,
           answers: payload.answers,
@@ -250,13 +257,14 @@ function CriarFlow() {
   }
 
   async function finishQuestions(nextAnswers: Record<string, string>) {
-    if (!destination || !resolvedProductId || !modelId) return;
+    if (!destination || !resolvedProductId) return;
+    if (!modelId && !integrationId) return;
     await ensurePhoto(resolvedProductId);
     await generateCampaign({
       destination,
       productId: resolvedProductId,
       modelId,
-      coverAssetId: needsProductIntegration(destination) ? integrationId : null,
+      coverAssetId: integrationId,
       outputs,
       answers: nextAnswers,
     });
@@ -394,6 +402,7 @@ function CriarFlow() {
     }
     setBusy(true);
     try {
+      setReuseExistingCover(false);
       if (needsProductIntegration(destination)) {
         const reuse =
           previewIntegration &&
@@ -413,6 +422,14 @@ function CriarFlow() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleSkipTalent() {
+    setReuseExistingCover(true);
+    setModelId(null);
+    setPreviewModel(null);
+    setTalentError(null);
+    setStep("integration");
   }
 
   async function handleContinueIntegration() {
@@ -718,7 +735,8 @@ function CriarFlow() {
             <h2 className="text-sm font-semibold text-foreground">Qual modelo usar?</h2>
             <p className="mt-1 text-sm text-foreground/55">
               Gere uma mulher para validar. Se gostar, aprove. Se nao, gere outra. Todas ficam na
-              biblioteca de imagens.
+              biblioteca de imagens. Se a modelo ja estiver com o produto numa foto da biblioteca,
+              pule esta etapa.
             </p>
           </div>
 
@@ -756,6 +774,7 @@ function CriarFlow() {
                     setPreviewIntegration(null);
                     setIntegrationId(null);
                   }
+                  setReuseExistingCover(false);
                   setModelId(asset.id);
                   setPreviewModel(asset);
                 }}
@@ -802,7 +821,7 @@ function CriarFlow() {
             <p className="rounded-xl bg-danger-bg px-4 py-3 text-sm text-danger-fg">{talentError}</p>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
               onClick={() => void generateTalent()}
@@ -821,6 +840,14 @@ function CriarFlow() {
               Integrar modelo ao Produto
             </Button>
           </div>
+          <button
+            type="button"
+            onClick={handleSkipTalent}
+            disabled={talentBusy}
+            className="text-sm text-foreground/55 underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+          >
+            Pular: ja tenho a foto da modelo com o produto
+          </button>
         </div>
       )}
 
@@ -828,16 +855,22 @@ function CriarFlow() {
         <div className="mx-auto max-w-2xl space-y-6">
           <button
             type="button"
-            onClick={() => setStep("talent")}
+            onClick={() => {
+              setReuseExistingCover(false);
+              setStep("talent");
+            }}
             className="inline-flex items-center gap-1.5 text-sm text-foreground/55 hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Voltar
           </button>
           <div>
-            <h2 className="text-sm font-semibold text-foreground">A modelo com o produto</h2>
+            <h2 className="text-sm font-semibold text-foreground">
+              {reuseExistingCover ? "Qual foto integrada usar?" : "A modelo com o produto"}
+            </h2>
             <p className="mt-1 text-sm text-foreground/55">
-              Veja a mulher com o produto integrado. Se gostar, aprove. Se nao, gere outra.
-              So depois disso o video da campanha e produzido.
+              {reuseExistingCover
+                ? "Escolha na biblioteca a imagem da modelo com o produto. O video parte desse quadro, sem gerar outra integracao."
+                : "Veja a mulher com o produto integrado. Se gostar, aprove. Se nao, gere outra. So depois disso o video da campanha e produzido."}
             </p>
           </div>
 
@@ -865,8 +898,15 @@ function CriarFlow() {
             </div>
           )}
 
+          {reuseExistingCover && visibleIntegrations.length === 0 && (
+            <p className="rounded-xl bg-surface-muted px-4 py-3 text-sm text-foreground/60">
+              Nenhuma foto de modelo com produto na biblioteca. Volte e integre uma modelo, ou
+              envie a imagem em Configuracoes → Imagens como &quot;Modelo com produto&quot;.
+            </p>
+          )}
+
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {productIntegrations.map((asset) => (
+            {visibleIntegrations.map((asset) => (
               <button
                 key={asset.id}
                 type="button"
@@ -902,15 +942,17 @@ function CriarFlow() {
                 </div>
               </button>
             ))}
-            <button
-              type="button"
-              onClick={() => void generateIntegration()}
-              disabled={integrationBusy || !modelId}
-              className="flex aspect-9/16 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-300 bg-brand-50/40 text-sm font-medium text-brand-800 hover:border-brand-400 disabled:opacity-60"
-            >
-              <Sparkles className="h-5 w-5" />
-              {integrationBusy ? "Gerando..." : "Gerar outra integracao"}
-            </button>
+            {!reuseExistingCover && (
+              <button
+                type="button"
+                onClick={() => void generateIntegration()}
+                disabled={integrationBusy || !modelId}
+                className="flex aspect-9/16 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-300 bg-brand-50/40 text-sm font-medium text-brand-800 hover:border-brand-400 disabled:opacity-60"
+              >
+                <Sparkles className="h-5 w-5" />
+                {integrationBusy ? "Gerando..." : "Gerar outra integracao"}
+              </button>
+            )}
           </div>
 
           {integrationError && (
@@ -918,14 +960,16 @@ function CriarFlow() {
           )}
 
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void generateIntegration()}
-              loading={integrationBusy}
-              icon={<Sparkles className="h-4 w-4" />}
-            >
-              {integrationId ? "Gerar outra" : "Gerar integracao"}
-            </Button>
+            {!reuseExistingCover && (
+              <Button
+                variant="outline"
+                onClick={() => void generateIntegration()}
+                loading={integrationBusy}
+                icon={<Sparkles className="h-4 w-4" />}
+              >
+                {integrationId ? "Gerar outra" : "Gerar integracao"}
+              </Button>
+            )}
             <Button
               className="flex-1"
               onClick={() => void handleContinueIntegration()}
@@ -933,7 +977,7 @@ function CriarFlow() {
               loading={busy}
               icon={<Check className="h-4 w-4" />}
             >
-              Aprovar e gerar campanha
+              {reuseExistingCover ? "Usar esta imagem" : "Aprovar e gerar campanha"}
             </Button>
           </div>
         </div>
@@ -952,7 +996,9 @@ function CriarFlow() {
           onNext={() => void handleQuestionNext()}
           onBack={() => {
             if (questionIndex === 0) {
-              setStep(needsProductIntegration(destination) ? "integration" : "talent");
+              setStep(
+                reuseExistingCover || needsProductIntegration(destination) ? "integration" : "talent"
+              );
               return;
             }
             setQuestionIndex((index) => index - 1);
